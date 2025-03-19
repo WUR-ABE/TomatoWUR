@@ -5,7 +5,9 @@
 > Paper: https://todo.nl -->
 
 ## About
-Official implementation of data in brief: An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant trait extraction algorithms for 3D plant phenotyping
+Official implementation of data in brief: 
+
+**An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant trait extraction algorithms for 3D plant phenotyping**
 
 Related to the dataset paper semantic segmentation:
 3D plant segmentation: comparing a 2D-to-3D segmentation method with state-of-the-art 3D segmentation algorithms
@@ -21,8 +23,18 @@ Make sure to extract and download the dataset, this will be done automatically i
 ```
 python3 wurTomato.py --visualise 0
 ```
+For more examples have a look at the example_notebook.ipynb
+
 Settings are described in config file
 
+<center>
+    <p align="center">
+        <img src="Resources/3D_tomato_plant.png" height="100" />
+        <img src="Resources/3D_tomato_plant_semantic.png" height="100" />
+        <img src="Resources/3D_tomato_plant_skeleton.png" height="100" />
+
+    <!-- </p> -->
+</center>
 
 ## Citation
 ```
