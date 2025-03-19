@@ -36,9 +36,7 @@ Settings are described in config file
 </center>
 
 ## Citation
-```
-
-```
+TOBE ADDED
 
 ## Funding
-This research is part of AgrifoodTEF
+This research is part of AgrifoodTEF: Test and Experiment Facilities for the Agri-Food Domain (101100622)
