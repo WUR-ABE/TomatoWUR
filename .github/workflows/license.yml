@@ -1,0 +1,20 @@
+on: [push, pull_request, workflow_dispatch]
+name: LICENSE
+jobs:
+  Validate-LICENSE:
+    name: LICENSE Existence Checker
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for LICENSE file
+        run: |
+          if [ -f LICENSE ]; then
+            echo "LICENSE file exists."
+          else
+            echo "Error: LICENSE file does not exist."
+            exit 1
+          fi

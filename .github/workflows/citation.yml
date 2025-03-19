@@ -1,0 +1,24 @@
+on:
+  push:
+  workflow_dispatch:
+
+name: CITATION.cff
+jobs:
+  Validate-CITATION-cff:
+    runs-on: ubuntu-latest
+    name: Check CITATION.cff
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for CITATION file
+        run: |
+          if [ -f CITATION.cff ]; then
+            echo "CITATION file exists."
+          else
+            echo "Error: CITATION file does not exist."
+            exit 1
+          fi
