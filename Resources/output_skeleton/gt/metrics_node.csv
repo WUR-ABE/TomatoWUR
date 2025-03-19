@@ -1,0 +1,7 @@
+metric,node_order,node_order_0,node_order_1,node_order_2,node_order_3
+TP,1155.0,124,485,504,42
+FP,0.0,0,0,0,0
+FN,0.0,0,0,0,0
+Precision,1.0,1.0,1.0,1.0,1.0
+Recall,1.0,1.0,1.0,1.0,1.0
+CD,0.0,,,,

@@ -1,0 +1,6 @@
+metric,value
+TP_edges,307.0
+FP_edges,368.0
+FN_edges,83.0
+Precision_edges,0.45481481481481484
+Recall_edges,0.7871794871794872

@@ -1,32 +1,33 @@
-# Robot harvester: works perfect
+<!-- # Robot harvester: works perfect
 ![robot](assets/example.jpg "robot")
 > **Robot harvester: works perfect**\
 > Me Myself, Some Supervisor, Some Other Person
-> Paper: https://todo.nl
+> Paper: https://todo.nl -->
 
 ## About
-Official implementation of the paper 'Robot harvester: perfect harvesting of fruits'. This software is perfect in harvesting fruits. 
+Official implementation of data in brief: An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant trait extraction algorithms for 3D plant phenotyping
+
+Related to the dataset paper semantic segmentation:
+3D plant segmentation: comparing a 2D-to-3D segmentation method with state-of-the-art 3D segmentation algorithms
 
 ## Installation
-Describe here how to install your software (if relevant). Which Python version does it require? Which dependencies do you have to install, e.g.:
-
-This software is tested on Python 3.10. To install the dependencies, run:
+This software is tested on Python 3.11. To install the dependencies, run:
 ```
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Usage
-Describe how to run your code, e.g.:
+Make sure to extract and download the dataset, this will be done automatically if path can not be found:
+```
+python3 wurTomato.py --visualise 0
+```
+Settings are described in config file
 
-To start training on your custom dataset:
-```
-python3 train.py <<path_to_custom_dataset>>
-```
 
 ## Citation
 ```
-<<ADD CITATION IN BIBTEX FORMAT>>
+
 ```
 
 ## Funding
-This research is part of ..... 
+This research is part of AgrifoodTEF

@@ -1,0 +1,46 @@
+##config_file
+project_dir: W:\PROJECTS\VisionRoboticsData\GARdata\datasets
+project_code: "tomato_plant_segmentation/20241223_csv_skeletons"
+# url: TODO
+
+data:
+  annot_version: "0-paper-2Dto3D"
+  ann_dir: ${project_dir}/${project_code}/ann_versions/${data.annot_version}/annotations
+  img_dir: ${project_dir}/${project_code}/images/
+  pointcloud_dir: ${project_dir}/${project_code}/point_clouds/
+  json_split: test
+  json_path: ${project_dir}/${project_code}/anns/${data.annot_version}/json/${data.json_split}.json
+
+run_mode: ["skeletonization", "evaluation"] # or ["skeletonization", "evaluation"]
+skeleton_method: "xu"
+
+root_method: "circle_fit" # center or bottom or line or pyransac3d, cylinderfit, circle_fit
+xu:
+  binratio: 20
+  n_neighbors: 20
+  # nodes2edges: "xu" # xu is build in implementatin of xu, geodesic or euclidean
+  nodes2edges: "xu" # xu is build in implementatin of xu, geodesic or euclidean
+
+evaluation:
+  evaluate_gt: False
+post_processing:
+  # methods: [f3]
+  methods: [f2, f3, f1, f2, f3, f4, f5, f2]
+  f1:
+    gaussian_smoothing:
+      var0: 0.25
+      var1: 0.25
+  f2:
+    filter:
+      node_order: 100000
+      keep_parents_only: True
+  f3: 
+    get_edge_type: 
+  f4: 
+    edge_from_filtered:
+  f5: 
+    line_fitting_3d:
+
+
+## Add gaussian filter (see plantscan3d)
+## Add post optimisation method (see stochastic optimization)
