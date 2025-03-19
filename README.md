@@ -29,11 +29,10 @@ Settings are described in config file
 
 <center>
     <p align="center">
-        <img src="Resources/3D_tomato_plant.png" height="100" />
-        <img src="Resources/3D_tomato_plant_semantic.png" height="100" />
-        <img src="Resources/3D_tomato_plant_skeleton.png" height="100" />
-
-    <!-- </p> -->
+        <img src="Resources/3D_tomato_plant.png" height="200" />
+        <img src="Resources/3D_tomato_plant_semantic.png" height="200" />
+        <img src="Resources/3D_tomato_plant_skeleton.png" height="200" />
+    </p>
 </center>
 
 ## Citation
