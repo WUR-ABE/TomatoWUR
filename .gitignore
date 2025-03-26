@@ -1,3 +1,6 @@
 *.pyc
 .polyscope.ini
 imgui.ini
+
+wurTomato_nonpublishedcode.py
+not_public*

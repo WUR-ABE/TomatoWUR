@@ -37,12 +37,12 @@ def create_skeleton_gt_data(skeleton_path, pc_path=None, pc_semantic_path=None):
 	edge_types = skeleton_data["edgetype"].values[1:].astype(str)
 
 	if "gt_int_length" in df_skeleton.columns:
-		skeleton_data = df_skeleton.loc[~df_skeleton["x_skeleton"].isna(), ["gt_int_length", "gt_int_diameter", "gt_ph_angle", "gt_br_angle"]]
+		skeleton_data = df_skeleton.loc[~df_skeleton["x_skeleton"].isna(), ["gt_int_length", "gt_int_diameter", "gt_ph_angle", "gt_lf_angle"]]
 		attributes_gt = {
 			"gt_int_length": skeleton_data["gt_int_length"].values,
 			"gt_int_diameter": skeleton_data["gt_int_diameter"].values,
 			"gt_ph_angle": skeleton_data["gt_ph_angle"].values,
-			"gt_br_angle": skeleton_data["gt_br_angle"].values
+			"gt_lf_angle": skeleton_data["gt_lf_angle"].values
 		}
 	else:
 		attributes_gt = None

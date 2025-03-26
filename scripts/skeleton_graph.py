@@ -63,7 +63,7 @@ class SkeletonGraph():
 		Calculates the internode lengths and updates the graph.
 	add_gt_attributes(location, dict_attributes)
 		Adds ground truth attributes to the closest node to a given location.
-	get_gt_attributes(attributes_list=["gt_int_length", "gt_ph_angle", "gt_br_angle"])
+	get_gt_attributes(attributes_list=["gt_int_length", "gt_ph_angle", "gt_lf_angle"])
 		Retrieves specified ground truth attributes from the graph.
 	get_angles(node_roder=1)
 		Calculates angles between nodes and updates the graph.
@@ -518,14 +518,14 @@ class SkeletonGraph():
 
 	def add_gt_attributes(self, location, dict_attributes):
 		# location = "x_skeleton", "y_skeleton", "z_skeleton"
-		# dict_attributes = {gt_int_length, gt_int_diameter, gt_ph_angle, gt_br_angle}
+		# dict_attributes = {gt_int_length, gt_int_diameter, gt_ph_angle, gt_lf_angle}
 		poses = self.get_node_attribute("pos")
 
 		array = np.linalg.norm(poses - location, axis=1)
 		self.G.nodes[array.argmin()].update(dict_attributes)
 		pass
 
-	def get_gt_attributes(self, attributes_list = ["gt_int_length", "gt_ph_angle", "gt_br_angle"]): # "gt_int_diameter"
+	def get_gt_attributes(self, attributes_list = ["gt_int_length", "gt_ph_angle", "gt_lf_angle"]): # "gt_int_diameter"
 		gt_values = []
 		for node in self.G.nodes():
 			temp_attributes = {}
@@ -596,7 +596,7 @@ class SkeletonGraph():
 		
 		## add internode length to graph
 		for node, angle in branch_angles:
-			self.G.nodes[node]["br_angle"] = angle
+			self.G.nodes[node]["lf_angle"] = angle
 
 		print("x")
 

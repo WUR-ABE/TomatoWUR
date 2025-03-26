@@ -639,7 +639,7 @@ class Evaluation():
 		
 
 		################################### trait metrics 
-		self.traits = ["gt_int_length", "gt_ph_angle", "gt_br_angle"] # "gt_int_diameter"
+		self.traits = ["gt_int_length", "gt_ph_angle", "gt_lf_angle"] # "gt_int_diameter"
 		dt_graph.get_internode_length()
 		dt_graph.get_angles()
 		trait_metrics = {x:{"gt":[], "dt":[], "counter":0, "counter_notmatched":0} for x in self.traits}
