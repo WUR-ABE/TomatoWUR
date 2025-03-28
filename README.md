@@ -5,11 +5,13 @@
 > Paper: https://todo.nl -->
 
 ## About
-Official implementation of data in brief: 
+Official implementation of [TomatoWUR](https://data.4tu.nl/datasets/e2c59841-4653-45de-a75e-4994b2766a2f/1)
+ dataset: 
 
 **An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant trait extraction algorithms for 3D plant phenotyping**
 
-Related to the dataset paper semantic segmentation:
+
+The dataset is related to the (in review):
 3D plant segmentation: comparing a 2D-to-3D segmentation method with state-of-the-art 3D segmentation algorithms
 
 ## Installation
@@ -36,7 +38,19 @@ Settings are described in config file
 </center>
 
 ## Citation
-TOBE ADDED
+@misc{https://doi.org/10.4121/e2c59841-4653-45de-a75e-4994b2766a2f.v1,
+  doi = {10.4121/e2c59841-4653-45de-a75e-4994b2766a2f.v1},
+  url = {},
+  author = {Marrewijk, van, Bart M. and Xin, Bolai and van Daalen, Tim and van Henten, Eldert and Polder, Gerrit and Kootstra, Gert},
+  keywords = {3D plant phenotyping, horticulture, tomato, segmentation, plant architecture, point clouds, RGB images, 3D phenotyping, shape-from-silhouette},
+  title = {TomatoWUR: an annotated dataset of 3D tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant trait extraction algorithms for 3D plant phenotyping},
+  publisher = {4TU.ResearchData},
+  year = {2025},
+  copyright = {CC BY-SA 4.0},
+}
+
+## Related research
+[2Dto3D segmentation paper](https://github.com/WUR-ABE/2D-to-3D_segmentation)
 
 ## Funding
 This research is part of AgrifoodTEF: Test and Experiment Facilities for the Agri-Food Domain (101100622)
