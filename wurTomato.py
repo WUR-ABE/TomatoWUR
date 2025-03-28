@@ -101,11 +101,11 @@ class WurTomatoData(Dataset):
             self.dataset = json.load(f)
         for x in self.dataset:
             for key, value in x.items():
-                if key=="images" or key=="images_seg":
+                if key=="images" or key=="images_seg" or key=="genotype":
                         continue
                 x[key] = self.data.json_path.parent / value
                 if not x[key].is_file():
-                    print("warning file is missing")
+                    print(f"warning {x[key]} is missing")
 
         self.S_gt = None
         self.camera_specs = None
@@ -118,18 +118,28 @@ class WurTomatoData(Dataset):
         exist then download the zip file
         """
         print(self.project_dir)
-        if not (self.project / self.checkFolder).is_dir():
+        if not (self.project_dir / self.project_code).is_dir():
+            self.downloadFile = "temp.zip"
+            if (self.project_dir / self.downloadFile).is_file():
+                print("Already downloaded but not unzipped")
+                return
             # if not (self.folder / self.downloadFile).is_file():
             # print("Downloading: " + self.downloadFile + " to folder: " + self.folder + " from: " + self.url)
-            print("This may take a while (TomatoWUR is 4.8GB)...")
-            response = requests.get(self.url, stream=True)
+            print("This may take a while (TomatoWUR is 3.36GB)...")
+
+            response = requests.get("https://" + str(self.url), stream=True)
             if response.status_code == 200:
-                # Open a local file with write-binary ('wb') mode
-                with open(self.folder / self.downloadFile, "wb") as file:
-                    for chunk in tqdm(response.iter_content(chunk_size=8192)):  # chunk size speeds up progress
-                        if chunk:  # Filter out keep-alive new chunks
+                total_size = int(response.headers.get('content-length', 0))  # Get total size in bytes
+                block_size = 8192  # Or whatever chunk size you want
+                progress_bar = tqdm(total=total_size, unit='iB', unit_scale=True)
+
+                with open(self.project_dir / self.downloadFile, "wb") as file:
+                    for chunk in response.iter_content(chunk_size=block_size):
+                        if chunk:
                             file.write(chunk)
-                    print("File downloaded successfully.")
+                            progress_bar.update(len(chunk))
+                progress_bar.close()
+                print("File downloaded successfully.")
             else:
                 print(f"Failed to download file. Status code: {response.status_code}")
         else:
@@ -142,12 +152,29 @@ class WurTomatoData(Dataset):
         and delete downloaded zip file
         """
         if (self.project_dir / self.downloadFile).is_file():
-            if not (self.project_dir).is_dir():
+            if not (self.project_dir / self.project_code).is_dir():
                 print(f"Extracting: {self.project_dir / self.downloadFile}")
                 with ZipFile(str(self.project_dir / self.downloadFile), "r") as zObject:
-                    zObject.extractall(path=str(self.folder))
-                print(f"Deleting {self.project_dir / self.downloadFile}")
-                os.remove(str(self.project_dir / self.downloadFile))
+                    file_list = zObject.namelist()
+                    total_files = len(file_list)
+                    progress_bar = tqdm(total=total_files, unit='file', desc="Extracting files")
+                    for file in file_list:
+                        zObject.extract(file, path=str(self.project_dir))
+                        progress_bar.update(1)
+                    progress_bar.close()
+
+                new_zip_file = self.project_dir / (self.project_code + ".zip")
+                print(f"Extracting: {new_zip_file}")
+                with ZipFile(new_zip_file, "r") as zObject:
+                    file_list = zObject.namelist()
+                    total_files = len(file_list)
+                    progress_bar = tqdm(total=total_files, unit='file', desc="Extracting files")
+                    for file in file_list:
+                        zObject.extract(file, path=str(self.project_dir))
+                        progress_bar.update(1)
+                    progress_bar.close()
+                print(f"Deleting {new_zip_file}")
+                os.remove(str(new_zip_file))
 
     def __load_graph(self, index):
         if self.S_gt is None or self.S_gt.name != self.dataset[index]["file_name"].stem:
@@ -330,9 +357,8 @@ if __name__ == "__main__":
 
     # Create an instance of WurTomatoData
     obj = WurTomatoData()
-    obj.voxel_carving()
-
-    exit()
+    # obj.voxel_carving()
+    # exit()
 
     # visualissation
     if args.visualise is not None:

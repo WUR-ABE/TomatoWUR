@@ -1,15 +1,16 @@
 ##config_file
-project_dir: W:\PROJECTS\VisionRoboticsData\GARdata\datasets
-project_code: "tomato_plant_segmentation/20241223_csv_skeletons"
-# url: TODO
+project_dir: "data/"
+project_code: TomatoWUR
+url: data.4tu.nl/ndownloader/items/e2c59841-4653-45de-a75e-4994b2766a2f/versions/1
 
 data:
-  annot_version: "0-paper-2Dto3D"
+  annot_version: 0-paper-2Dto3D
   ann_dir: ${project_dir}/${project_code}/ann_versions/${data.annot_version}/annotations
   img_dir: ${project_dir}/${project_code}/images/
   pointcloud_dir: ${project_dir}/${project_code}/point_clouds/
+  camera_poses_dir: ${project_dir}/${project_code}/camera_poses/
   json_split: test
-  json_path: ${project_dir}/${project_code}/anns/${data.annot_version}/json/${data.json_split}.json
+  json_path: ${project_dir}/${project_code}/ann_versions/${data.annot_version}/json/${data.json_split}.json
 
 run_mode: ["skeletonization", "evaluation"] # or ["skeletonization", "evaluation"]
 skeleton_method: "xu"
