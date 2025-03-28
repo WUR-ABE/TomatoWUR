@@ -119,16 +119,17 @@ class WurTomatoData(Dataset):
         """
         print(self.project_dir)
         if not (self.project_dir / self.project_code).is_dir():
+            if not self.project_dir.exists():
+                self.project_dir.mkdir()
+
             self.downloadFile = "temp.zip"
             if (self.project_dir / self.downloadFile).is_file():
                 print("Already downloaded but not unzipped")
                 return
-            # if not (self.folder / self.downloadFile).is_file():
-            # print("Downloading: " + self.downloadFile + " to folder: " + self.folder + " from: " + self.url)
-            print("This may take a while (TomatoWUR is 3.36GB)...")
 
             response = requests.get("https://" + str(self.url), stream=True)
             if response.status_code == 200:
+                print("Downaloding, this may take a while (TomatoWUR is 3.36GB)...")
                 total_size = int(response.headers.get('content-length', 0))  # Get total size in bytes
                 block_size = 8192  # Or whatever chunk size you want
                 progress_bar = tqdm(total=total_size, unit='iB', unit_scale=True)
