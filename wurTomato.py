@@ -181,6 +181,12 @@ class WurTomatoData(Dataset):
         if self.S_gt is None or self.S_gt.name != self.dataset[index]["file_name"].stem:
             self.S_gt = create_skeleton_gt_data(self.dataset[index]["skeleton_file_name"], pc_path=self.dataset[index]["file_name"], pc_semantic_path=self.dataset[index]["sem_seg_file_name"])
         return self.S_gt
+    
+    def get_index_by_name(self, name="Harvest_02_PlantNr_27"):
+        id_dict = {}
+        for i, item in enumerate(self.dataset):
+            id_dict[item["file_name"].stem] = i
+        return id_dict[name]
 
     # Loads xyz of point cloud
     def load_xyz_array(self, index):
@@ -188,7 +194,7 @@ class WurTomatoData(Dataset):
         self.__load_graph(index)
         return self.S_gt.get_xyz_pointcloud()
 
-    def __load_xyz_semantic_array(self, index):
+    def load_xyz_semantic_array(self, index):
         self.__load_graph(index)
         return self.S_gt.get_semantic_pointcloud()
 
@@ -244,8 +250,7 @@ class WurTomatoData(Dataset):
         self.S_gt.visualise_graph()
 
 
-    def run_semantic_evaluation(self):
-        dt_graph_dir = Path("./Resources/output_semantic_segmentation")
+    def run_semantic_evaluation(self, dt_graph_dir = Path("./Resources/output_semantic_segmentation")):
         obj = evaluate_semantic_segmentation.EvaluationSemantic(dt_graph_dir=dt_graph_dir, gt_json=self.data.json_path)
         obj.evaluate_pairs()
 
@@ -278,7 +283,7 @@ class WurTomatoData(Dataset):
             # if self.dataset[i]["file_name"].stem!="Harvest_01_PotNr_293":
             #     continue
             pcd = self.load_xyz_array(i)
-            semantic = self.__load_xyz_semantic_array(i)
+            semantic = self.load_xyz_semantic_array(i)
             pcd_filtered, semantic_filtered = self.get_filtered_data(i)
 
             root_idx = findBottomCenterRoot(pcd_filtered, semantic_filtered, method=self.cfg["root_method"])
