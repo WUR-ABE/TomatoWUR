@@ -328,6 +328,25 @@ class WurTomatoData(Dataset):
         if self.camera_specs is None:
             self.camera_specs = camera_calib.CameraClass(calib_folder=self.data.camera_poses_dir) 
 
+    def write_nerfstudio_transform(self, add_masks=True, index=0):
+        """
+        Writes the camera specifications and associated data in the Nerfstudio format.
+        Args:
+            add_masks (bool, optional): Whether to include masks in the output. Defaults to True.
+            index (int, optional): Index of the dataset to process. Defaults to 0.
+        """
+
+        from scripts.utils_data import nerfstudio_writer
+
+        self.load_camera_specs()
+        nerfstudio_dict = self.camera_specs.get_nerfstudio_format()
+
+        images_path, images_seg_path = self.get_2d_images(index=index)
+        xyz = self.load_xyz_array(index)
+
+        nerfstudio_writer(nerfstudio_dict, rgb_images_path=images_path, seg_images_path=images_seg_path, xyz=xyz, add_masks=add_masks)
+
+        
     def voxel_carving(self, index=0):
         """
         Create 3D point clouds using voxel carving (high similarity with original data but not exactly the same)
@@ -363,6 +382,8 @@ if __name__ == "__main__":
 
     # Create an instance of WurTomatoData
     obj = WurTomatoData()
+    # obj.write_nerfstudio_transform()
+    # exit()
     # obj.voxel_carving()
     # exit()
 
