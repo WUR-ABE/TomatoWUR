@@ -331,6 +331,7 @@ class WurTomatoData(Dataset):
     def write_nerfstudio_transform(self, add_masks=True, index=0):
         """
         Writes the camera specifications and associated data in the Nerfstudio format.
+        Credits to the AUTOLab at UC Berkeley
         Args:
             add_masks (bool, optional): Whether to include masks in the output. Defaults to True.
             index (int, optional): Index of the dataset to process. Defaults to 0.
