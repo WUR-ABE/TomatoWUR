@@ -1,7 +1,8 @@
 ##config_file
-project_dir: "data/"
+# project_dir: "/home/agro/w-drive-vision/GARdata/datasets/tomato_plant_segmentation/TomatoWUR_4dataTU/"
+project_dir: "/media/agro/PhDBart1/2D-to-3D_segmentation/TomatoWUR/data/"
 project_code: TomatoWUR
-url: data.4tu.nl/ndownloader/items/e2c59841-4653-45de-a75e-4994b2766a2f/versions/1
+url: data.4tu.nl/ndownloader/items/e2c59841-4653-45de-a75e-4994b2766a2f/versions/2
 
 data:
   annot_version: 0-paper-2Dto3D
