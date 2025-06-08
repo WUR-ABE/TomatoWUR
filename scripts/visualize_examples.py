@@ -2,7 +2,7 @@
 import polyscope as ps
 import numpy as np
 
-pc_radius = 0.00025
+pc_radius = 0.001
 node_radius = 0.006
 skeleton_radius = 0.001
 vector_length = 0.02

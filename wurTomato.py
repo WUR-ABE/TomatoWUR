@@ -15,6 +15,7 @@ import numpy as np
 # import open3d as o3d
 # import matplotlib.pyplot as plt
 import json
+import matplotlib.pyplot as plt
 
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -43,6 +44,7 @@ semantic_id2rgb_colour = {
     3: [109, 255, 50],
     4: [50, 167, 255],
     5: [167, 50, 255],
+    6: [255,255,255], ## represent class 255
 }
 # Find the maximum semantic ID to determine the size of the array
 max_id = max(semantic_id2rgb_colour.keys())
@@ -235,14 +237,34 @@ class WurTomatoData(Dataset):
     def visualise_semantic(self, index, semantic_name= "semantic"):
         self.__load_graph(index)
         print(f'Visualising semantic {self.dataset[index]["file_name"].stem}')
-        labels = self.S_gt.get_semantic_pointcloud(semantic_name=semantic_name)
-        colours = rgb_array[labels.astype(int)].copy()
+        labels = self.S_gt.get_semantic_pointcloud(semantic_name=semantic_name).astype(int)
+        labels[labels==255]=6 # convert noise labels to colour id 6
+        colours = rgb_array[labels].copy()
         ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=colours)
 
         ## visualising semantics with nodes
         # labels = self.S_gt.get_semantic_pointcloud(semantic_name="semantic_with_nodes")
         # colours = rgb_array[labels.astype(int)].copy()
         # ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=colours)
+    
+            ## visualising semantics with nodes
+    def visualise_instances(self, index=2, semantic_name="leaf_stem_instances"):
+    #     'leaf_stem_instances', 'leaf_instances',
+    #    'stem_instances', 'node_instances'
+        self.__load_graph(index)
+        labels = self.S_gt.get_semantic_pointcloud(semantic_name=semantic_name).astype(int)
+        # labels[labels==255]=6 # convert noise labels to colour id 6
+        unique_labels = np.unique(labels)
+        cmap = plt.get_cmap('tab20', len(unique_labels))
+        label_to_color = {}
+        for i, label in enumerate(unique_labels):
+            if label == -1:
+                label_to_color[label] = np.array([0, 0, 0])  # black for -1
+            else:
+                label_to_color[label] = np.array(cmap(i)[:3]) * 255
+        colours = np.array([label_to_color[label] for label in labels.flatten()], dtype=np.uint8)
+        ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=colours)
+
 
     def visualise_skeleton(self, index, parent_nodes_only=True):
         print(f'Visualising skeleton {self.dataset[index]["file_name"].stem}')
@@ -383,6 +405,8 @@ if __name__ == "__main__":
 
     # Create an instance of WurTomatoData
     obj = WurTomatoData()
+    # obj.visualise_semantic(index=2)
+    # obj.visualise_instances()
     # obj.write_nerfstudio_transform()
     # exit()
     # obj.voxel_carving()
