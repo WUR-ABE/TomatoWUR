@@ -1,0 +1,50 @@
+cff-version: 1.2.0
+message: If you use this software, please cite the preferred-citation.
+authors:
+  - family-names: van Marrewijk
+    given-names: Bart M. 
+    orcid: "https://orcid.org/0000-0003-3681-8114"
+  - family-names: van Daalen
+    given-names: Tim 
+    orcid: "https://orcid.org/0009-0003-0308-1969"
+  - family-names: Smoleňová
+    given-names: Katarína 
+    orcid: "https://orcid.org/0009-0008-3164-0955"
+  - family-names: Xin
+    given-names: Bolai 
+  - family-names: Polder
+    given-names: Gerrit 
+    orcid: "https://orcid.org/0000-0003-4896-4776"
+  - family-names: Kootstra
+    given-names: Gert
+    orcid: "https://orcid.org/0000-0002-2579-4324"
+title: "TomatoWUR: An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant-trait extraction algorithms for 3D plant phenotyping"
+version: 1.0.0
+url: https://doi.org/10.1016/j.dib.2025.111852
+preferred-citation:
+  authors:
+    - family-names: van Marrewijk
+      given-names: Bart M. 
+      orcid: "https://orcid.org/0000-0003-3681-8114"
+    - family-names: van Daalen
+      given-names: Tim 
+      orcid: "https://orcid.org/0009-0003-0308-1969"
+    - family-names: Smoleňová
+      given-names: Katarína 
+      orcid: "https://orcid.org/0009-0008-3164-0955"
+    - family-names: Xin
+      given-names: Bolai 
+    - family-names: Polder
+      given-names: Gerrit 
+      orcid: "https://orcid.org/0000-0003-4896-4776"
+    - family-names: Kootstra
+      given-names: Gert
+      orcid: "https://orcid.org/0000-0002-2579-4324"
+  title: "TomatoWUR: An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant-trait extraction algorithms for 3D plant phenotyping"
+  journal: "Data in Brief"
+  volume: 61
+  start: 111852
+  issn: "2352-3409"
+  doi: "10.1016/j.dib.2025.111852"
+  type: article
+  year: 2025

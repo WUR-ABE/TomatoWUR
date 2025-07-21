@@ -39,15 +39,16 @@ Settings are described in config file
 
 ## Citation
 ```
-@misc{https://doi.org/10.4121/e2c59841-4653-45de-a75e-4994b2766a2f.v1,
-  doi = {10.4121/e2c59841-4653-45de-a75e-4994b2766a2f.v1},
-  url = {https://data.4tu.nl/datasets/e2c59841-4653-45de-a75e-4994b2766a2f},
-  author = {Marrewijk, van, Bart M. and Xin, Bolai and van Daalen, Tim and van Henten, Eldert and Polder, Gerrit and Kootstra, Gert},
-  keywords = {3D plant phenotyping, horticulture, tomato, segmentation, plant architecture, point clouds, RGB images, 3D phenotyping, shape-from-silhouette},
-  title = {TomatoWUR: an annotated dataset of 3D tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant trait extraction algorithms for 3D plant phenotyping},
-  publisher = {4TU.ResearchData},
-  year = {2025},
-  copyright = {CC BY-SA 4.0},
+@article{VANMARREWIJK2025111852,
+title = {TomatoWUR: An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant-trait extraction algorithms for 3D plant phenotyping},
+journal = {Data in Brief},
+volume = {61},
+pages = {111852},
+year = {2025},
+issn = {2352-3409},
+doi = {https://doi.org/10.1016/j.dib.2025.111852},
+url = {https://www.sciencedirect.com/science/article/pii/S2352340925005773},
+author = {Bart M. {van Marrewijk} and Tim {van Daalen} and Katarína Smoleňová and Bolai Xin and Gerrit Polder and Gert Kootstra},
 }
 ```
 
