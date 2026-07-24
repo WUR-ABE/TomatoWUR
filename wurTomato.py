@@ -179,7 +179,7 @@ class WurTomatoData(Dataset):
                 print(f"Deleting {new_zip_file}")
                 os.remove(str(new_zip_file))
 
-    def __load_graph(self, index):
+    def load_graph(self, index):
         if self.S_gt is None or self.S_gt.name != self.dataset[index]["file_name"].stem:
             self.S_gt = create_skeleton_gt_data(self.dataset[index]["skeleton_file_name"], pc_path=self.dataset[index]["file_name"], pc_semantic_path=self.dataset[index]["sem_seg_file_name"])
         return self.S_gt
@@ -193,15 +193,15 @@ class WurTomatoData(Dataset):
     # Loads xyz of point cloud
     def load_xyz_array(self, index):
         # Loads the data from an .xyz file into a numpy array.
-        self.__load_graph(index)
+        self.load_graph(index)
         return self.S_gt.get_xyz_pointcloud()
 
     def load_xyz_semantic_array(self, index):
-        self.__load_graph(index)
+        self.load_graph(index)
         return self.S_gt.get_semantic_pointcloud()
 
     def get_filtered_data(self, index):
-        self.__load_graph(index)
+        self.load_graph(index)
         pcd = self.S_gt.get_xyz_pointcloud()
         semantic = self.S_gt.get_semantic_pointcloud()
         bool_array = np.bitwise_or(semantic==1 ,semantic==3) # 1=leaves, 2=main stem, 3=pole, 4=side stem
@@ -219,7 +219,7 @@ class WurTomatoData(Dataset):
     def __next__(self):
         if self.scan_index < len(self):
             # pointCloud, labels_available, labels, skeleton_data = self.__load_as_o3d_cloud(self.scan_index)
-            data = self.__load_graph(self.scan_index)
+            data = self.load_graph(self.scan_index)
             self.scan_index += 1
             return data
     
@@ -227,15 +227,15 @@ class WurTomatoData(Dataset):
             raise StopIteration
 
     def __getitem__(self, index):
-        return self.__load_graph(index)
+        return self.load_graph(index)
 
     def visualise(self, index=0):
-        self.__load_graph(index)
+        self.load_graph(index)
         print(f'Visualising {self.dataset[index]["file_name"].stem}')
         ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=self.S_gt.get_colours_pointcloud())
 
     def visualise_semantic(self, index, semantic_name= "semantic"):
-        self.__load_graph(index)
+        self.load_graph(index)
         print(f'Visualising semantic {self.dataset[index]["file_name"].stem}')
         labels = self.S_gt.get_semantic_pointcloud(semantic_name=semantic_name).astype(int)
         labels[labels==255]=6 # convert noise labels to colour id 6
@@ -251,7 +251,7 @@ class WurTomatoData(Dataset):
     def visualise_instances(self, index=2, semantic_name="leaf_stem_instances"):
     #     'leaf_stem_instances', 'leaf_instances',
     #    'stem_instances', 'node_instances'
-        self.__load_graph(index)
+        self.load_graph(index)
         labels = self.S_gt.get_semantic_pointcloud(semantic_name=semantic_name).astype(int)
         # labels[labels==255]=6 # convert noise labels to colour id 6
         unique_labels = np.unique(labels)
@@ -288,7 +288,7 @@ class WurTomatoData(Dataset):
 
     def visualise_skeleton(self, index, parent_nodes_only=True):
         print(f'Visualising skeleton {self.dataset[index]["file_name"].stem}')
-        self.__load_graph(index)
+        self.load_graph(index)
         self.S_gt.visualise_graph()
 
 
