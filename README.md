@@ -5,14 +5,21 @@
 > Paper: https://todo.nl -->
 
 ## About
-Official implementation of [TomatoWUR](https://data.4tu.nl/datasets/e2c59841-4653-45de-a75e-4994b2766a2f/1)
+Official implementation of [TomatoWUR](https://data.4tu.nl/datasets/e2c59841-4653-45de-a75e-4994b2766a2f/3)
  dataset: 
 
 **An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant trait extraction algorithms for 3D plant phenotyping**
 
-
 The dataset is related to the paper:
-[3D plant segmentation: Comparing a 2D-to-3D segmentation method with state-of-the-art 3D segmentation algorithms](https://www.sciencedirect.com/science/article/pii/S1537511025000832)
+- [3D plant segmentation: Comparing a 2D-to-3D segmentation method with state-of-the-art 3D segmentation algorithms](https://www.sciencedirect.com/science/article/pii/S1537511025000832)
+- [From point clouds to plant traits: investigation of a pipeline for phenotyping of tomato plants using skeletonisation]()
+
+## Changes:
+- 2025-11-14 published original TomatoWUR repo --> release tag: original_tomatowur_paper
+- 2026-05-27 In point cloud to plant traits paper 4 annotations errors were found. These annotations are added to the 4TU dataset version 3.
+- 2026-07-xx Added updates of point cloud to plant traits paper. This includes.
+    - Improved skeleton evaluation method
+    - Additional skeletonisation methods.
 
 ## Installation
 This software is tested on Python 3.11. To install the dependencies, run:
@@ -44,6 +51,8 @@ Settings are described in config file
 </center>
 
 ## Citation
+If you only use the TomatoWUR dataset, please use the citation below.
+If your work also uses components from the [2D-to-3D segmentation](https://doi.org/10.1016/j.biosystemseng.2025.104147) or the [point cloud to plant traits]() papers, please cite those as well.
 ```
 @article{VANMARREWIJK2025111852,
 title = {TomatoWUR: An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant-trait extraction algorithms for 3D plant phenotyping},
@@ -59,7 +68,8 @@ author = {Bart M. {van Marrewijk} and Tim {van Daalen} and Katarína Smoleňová
 ```
 
 ## Related research
-[2Dto3D segmentation paper](https://github.com/WUR-ABE/2D-to-3D_segmentation)
+- [2Dto3D segmentation](https://doi.org/10.1016/j.biosystemseng.2025.104147)
+- [Point cloud to plant traits](TODO)
 
 ## Funding
 This research is part of AgrifoodTEF: Test and Experiment Facilities for the Agri-Food Domain (101100622)
