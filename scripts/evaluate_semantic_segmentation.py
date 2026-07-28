@@ -135,7 +135,7 @@ class EvaluationSemantic():
 	def load_all_gt_filenames(self):
 		file_names = load_json(self.gt_json)
 		return natsorted([self.gt_json.parent / f["sem_seg_file_name"] for f in file_names])
-
+	
 	def evaluate_pairs(self, labels=[1,2,3,4]):
 		y_true_all, y_pred_all = [], []
 
@@ -147,7 +147,8 @@ class EvaluationSemantic():
 			y_true = self.load_gt_data(gt_name)
 			# print(np.unique(y_true))
 
-			y_pred = pd.read_csv(self.dt_path_dir / (plant_id + ".txt"))["class_pred"].values + 1 # +1 because
+			# y_pred = pd.read_csv(self.dt_path_dir / (plant_id + ".txt"))["class_pred"].values + 1 # +1 because
+			y_pred = self.load_gt_data(self.dt_path_dir / plant_id /  (plant_id + "_labels.csv"))
 			assert not len(y_true) != len(y_pred), "size not correct"
 				
 			# y_true, y_pred, labels = load_data(gt_name, pred_folder)
@@ -158,6 +159,7 @@ class EvaluationSemantic():
 			df_temp["plant_nr"] = plant_id
 			df_per_plant = pd.concat([df_per_plant, df_temp])
 
+		print("\n\n\n")
 		df_all = calculate_score(y_true=y_true_all, y_pred=y_pred_all, labels=labels)
 		print("average metrics for all plants:")
 		print(df_all)
@@ -179,8 +181,23 @@ class EvaluationSemantic():
 		return df_semantic["semantic"].values
 	
 if __name__=="__main__":
-	
-	gt_json = Path(r"W:\PROJECTS\VisionRoboticsData\GARdata\datasets\tomato_plant_segmentation\20241223_csv_skeletons\anns\0-paper-2Dto3D\json\test.json")
-	dt_graph_dir = Path("./Resources/output_semantic_segmentation")
-	obj = EvaluationSemantic(dt_graph_dir=dt_graph_dir, gt_json=gt_json)
-	obj.evaluate_pairs()
+	# original tomatoWUR
+	# gt_json = Path(r"W:\PROJECTS\VisionRoboticsData\GARdata\datasets\tomato_plant_segmentation\20241223_csv_skeletons\anns\0-paper-2Dto3D\json\test.json")
+	# dt_graph_dir = Path("./Resources/output_semantic_segmentation")
+	# obj = EvaluationSemantic(dt_graph_dir=dt_graph_dir, gt_json=gt_json)
+	# obj.evaluate_pairs()
+
+	# point cloud to plant traits
+	main_folder = Path("/home/agro/w-drive-vision/GARdata/datasets/tomato_plant_segmentation/TomatoWUR_4dataTU/TomatoWUR/ann_versions/")
+	gt_json = main_folder / "0-paper-2Dto3D_improved" / "json" / "manual_measurements_only.json"
+	iou_macro_avg = []
+	for x in range(0,6):
+		print(x)
+		dt_json = main_folder / f"1-paper3-swin3d-inference-train{x}" / "annotations" #"json" / "manual_measurements_only.json"
+		obj = EvaluationSemantic(dt_graph_dir=dt_json, gt_json=gt_json)
+		df_all, _ = obj.evaluate_pairs()
+		iou_macro_avg.append(df_all["iou_macro"].values[0])
+	print(iou_macro_avg)
+	print("avg_mean all experiments",np.mean(iou_macro_avg))
+	print("std all experiments",np.std(iou_macro_avg))
+	## 0.81

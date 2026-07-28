@@ -644,10 +644,12 @@ class SkeletonGraph():
 		f.close()
 
 	
-	def load_csv(self, path):
-		df = pd.read_csv(str(path), low_memory=False)
+	def load_csv(self, csv_path: Path):
+		if not csv_path.exists():
+			raise FileNotFoundError(f"Please check file path {csv_path}")
+		df = pd.read_csv(str(csv_path), low_memory=False)
 		self.load(nodes=df[["x", "y", "z"]].dropna().values, edges=df[["parentid", "vid"]].dropna().astype(int).values, edge_types=df["edgetype"].dropna().values)
-		self.name = path.stem
+		self.name = csv_path.stem
 
 	def get_internode_length(self):
 		### calculate internode length, by returning nodes with node order =0 and only parents nodes
