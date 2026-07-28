@@ -10,10 +10,17 @@ import pandas as pd
 
 class Metrics():
 
-    def __init__(self,y_pred,gt) -> None:
-        print('N = %d'%len(y_pred))
+    def __init__(self,y_pred,gt, verbose=False) -> None:
         self.y_pred = np.array(y_pred)
         self.gt = np.array(gt)
+        self.verbose = verbose
+
+        if self.y_pred.size==0 and self.gt.size==0:
+            self.y_pred = np.array(np.nan)
+            self.gt = np.array(0)
+
+        if verbose:
+            print('N = %d'%len(y_pred))
 
         self.MEAN()
         self.MAE()
@@ -31,32 +38,37 @@ class Metrics():
     def MEAN(self):
         self.mean = (self.y_pred-self.gt).mean()
         self.mean_std = (self.y_pred-self.gt).std()
-        print('Mean Error %0.2f std %.2f'%(self.mean, self.mean_std))
+        if self.verbose:
+            print('Mean Error %0.2f std %.2f'%(self.mean, self.mean_std))
 
     def MAE(self):
         # https://en.wikipedia.org/wiki/Mean_absolute_error
         self.mae = np.abs(self.y_pred-self.gt).mean()
         self.mae_std = np.abs(self.y_pred-self.gt).std()
-        print('Mean Absolute Error %0.2f std %.2f'%(self.mae, self.mae_std))
+        if self.verbose:
+            print('Mean Absolute Error %0.2f std %.2f'%(self.mae, self.mae_std))
 
     def MSE(self):
         # https://en.wikipedia.org/wiki/Mean_squared_error
         self.mse = np.mean(np.power(self.y_pred-self.gt,2))
         self.mse_std = np.std(np.power(self.y_pred-self.gt,2))
-        print('Mean Squared Error %0.2f std %.2f'%(self.mse, self.mse_std))
+        if self.verbose:
+            print('Mean Squared Error %0.2f std %.2f'%(self.mse, self.mse_std))
 
     def RMSE(self):
         # https://en.wikipedia.org/wiki/Root-mean-square_deviation
         self.rmse = np.sqrt(np.mean(np.power(self.y_pred-self.gt,2)))
         # self.mse_std = np.std((self.y_pred-self.gt)^2)
         self.rmse_std = np.nan
-        print('Root Mean Squared Error %0.2f std %.2f'%(self.rmse, self.rmse_std))
+        if self.verbose:
+            print('Root Mean Squared Error %0.2f std %.2f'%(self.rmse, self.rmse_std))
 
     def MAPE(self):
         # https://en.wikipedia.org/wiki/Mean_absolute_percentage_error
         self.mape = np.mean(np.abs((self.y_pred-self.gt)/self.gt)*100)
         self.mape_std = np.std(np.abs((self.y_pred-self.gt)/self.gt)*100)
-        print('Mean Absolute Percentage Error %0.2f[percentage] std %.2f'%(self.mape, self.mape_std))
+        if self.verbose:
+            print('Mean Absolute Percentage Error %0.2f[percentage] std %.2f'%(self.mape, self.mape_std))
 
     ##R2 = 1-SSE / SST
     def r2(self, y_pred,gt):
@@ -81,12 +93,11 @@ class Metrics():
             equation =  '%.3f*x-%0.2f'%(model.coef_,model.intercept_)
         else:
             equation =  '%.3f*x+%0.2f'%(model.coef_,model.intercept_)
-        print(equation)
         r_sq = model.score(x, y)
-        print(f"coefficient of determination: {r_sq}")
-
-
-        print(self.r2(model.predict(x),self.gt))
+        if self.verbose:
+            print(equation)
+            print(f"coefficient of determination: {r_sq}")
+            print(self.r2(model.predict(x),self.gt))
         
         from sklearn.metrics import r2_score
         x=x.squeeze()
