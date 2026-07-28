@@ -4,13 +4,15 @@ import pandas as pd
 import numpy as np
 import math
 import sys
+from copy import deepcopy
+
 from dataclasses import dataclass
 sys.path.append("")
 from scripts import visualize_examples as ve
 from scripts.postprocessing_methods import gaussian_weight, find_closest_points, create_new_points
 from scripts.calculate_angles import openalea_method, xy_plane_method
 from scripts.graph_to_tree import graph_edges_to_tree, get_single_edge_type, direction
-
+from scripts.utils_data import get_rotation_matrix
 
 class SkeletonGraph():
 	'''
@@ -185,6 +187,58 @@ class SkeletonGraph():
 
 		pass
 
+	@classmethod
+	def from_skeleton_gt_data(cls, skeleton_path, pc_path=None, pc_semantic_path=None):
+		"""
+		Load the skeleton data from the ground truth file and create a SkeletonGraph object.
+
+		Parameters:
+		skeleton_path (str or Path): Path to the ground truth skeleton file.
+		pc_path (str or Path, optional): Path to the point cloud file. Default is None.
+		pc_semantic_path (str or Path, optional): Path to the point cloud semantic file. Default is None.
+
+		Returns:
+		SkeletonGraph: A SkeletonGraph object containing the loaded skeleton data.
+		"""
+
+		df_skeleton = pd.read_csv(str(skeleton_path), low_memory=False)
+		
+		# Optionally load point cloud and semantic information as well
+		df_pointcloud = None
+		if pc_path is not None:
+			df_pointcloud = pd.read_csv(str(pc_path))
+		if pc_semantic_path is not None:
+			df_semantics = pd.read_csv(str(pc_semantic_path))
+			if df_pointcloud is None:
+				df_pointcloud = df_semantics
+			else:
+				df_pointcloud = pd.concat([df_pointcloud, df_semantics], axis=1)
+
+		skeleton_data = df_skeleton.loc[
+			~df_skeleton["x_skeleton"].isna(), ["x_skeleton", "y_skeleton", "z_skeleton", "vid", "parentid", "edgetype"]
+		]
+
+		nodes = skeleton_data[["x_skeleton", "y_skeleton", "z_skeleton"]].values
+		edges = skeleton_data[["parentid", "vid"]].values[1:].astype(int)
+		edge_types = skeleton_data["edgetype"].values[1:].astype(str)
+
+		if "gt_int_length" in df_skeleton.columns:
+			skeleton_data = df_skeleton.loc[~df_skeleton["x_skeleton"].isna(), ["gt_int_length", "gt_int_diameter", "gt_ph_angle", "gt_lf_angle"]]
+			attributes_gt = {
+				"gt_int_length": skeleton_data["gt_int_length"].values,
+				"gt_int_diameter": skeleton_data["gt_int_diameter"].values,
+				"gt_ph_angle": skeleton_data["gt_ph_angle"].values,
+				"gt_lf_angle": skeleton_data["gt_lf_angle"].values
+			}
+		else:
+			attributes_gt = {}
+		
+		S_gt = cls()
+		S_gt.load(nodes, edges, edge_types.tolist(), df_pc=df_pointcloud, attributes=attributes_gt)
+		S_gt.name = skeleton_path.stem.replace("_skeleton", "")
+		S_gt.get_node_order()
+
+		return S_gt
 
 	def get_node_order(self):
 		# Step 4: get node order and determine is node is a parent
@@ -256,7 +310,7 @@ class SkeletonGraph():
 		else:
 			return None
 
-	def visualise_graph(self, show_segmented=False, **kwargs):
+	def visualise_graph(self, show_segmented=False, semantic_name="semantic", **kwargs):
 		all_nodes_with_attributes = dict(self.G.nodes(data=True))
 		nodes = np.array([x["pos"] for x in all_nodes_with_attributes.values()])
 
@@ -276,13 +330,16 @@ class SkeletonGraph():
 
 		if show_segmented:
 			xyz = self.get_xyz_pointcloud()
-			semantic = self.get_semantic_pointcloud()
-			bool_array = np.bitwise_or(semantic==1 ,semantic==3) # 1=leaves, 2=main stem, 3=pole, 4=side stem
+			semantic = self.get_semantic_pointcloud(semantic_name)
+			bool_array = np.zeros(semantic.shape[0]).astype(np.bool)
+			# bool_array = np.bitwise_or(semantic==1 ,semantic==3) # 1=leaves, 2=main stem, 3=pole, 4=side stem
 
 			ve.vis(pc = xyz[~bool_array, :], colors=semantic[~bool_array], nodes=nodes, edges=edges, node_order=node_order, parents=parents, edges_type=edges_type, attributes=attributes, **kwargs)
 
 		else:
-			ve.vis(pc = self.get_xyz_pointcloud(), nodes=nodes, edges=edges, node_order=node_order, parents=parents, edges_type=edges_type, attributes=attributes, **kwargs)
+			ve.vis(pc = self.get_xyz_pointcloud(),  colors=self.get_colours_pointcloud(), 
+		#   distances=self.get_semantic_pointcloud(),
+		  nodes=nodes, edges=edges, node_order=node_order, parents=parents, edges_type=edges_type, attributes=attributes, **kwargs)
 
 	def get_attributes(self):
 		# Collect all unique keys from the attribute dictionaries
@@ -372,7 +429,7 @@ class SkeletonGraph():
 		points_to_remove = np.setdiff1d(np.arange(nodes.shape[0]), indices).tolist()
 		self.remove_node_and_update_edge(points_to_remove, do_relabel=True)
 
-	def remove_node_and_update_edge(self, node_id:int, do_relabel: bool = True):
+	def remove_node_and_update_edge(self, node_id:int | list, do_relabel: bool = True):
 		"""
 		Remove node_id and reconnect edges accordingly
 		"""
@@ -597,15 +654,30 @@ class SkeletonGraph():
 			branch_number+=1
 
 
-	def export_as_nodelist(self, path):
+	def export_as_nodelist(self, save_path=None, rename=False, first_row_correction=False):
 		# nx.write_gpickle(self.G, path)
 		df = pd.DataFrame(self.get_node_attribute("pos"), columns=["x", "y", "z"])
-		df_2 = pd.DataFrame(self.get_edges(), columns=["parentid", "vid"])
-		df_2["edgetype"] = self.get_edge_attribute("edge_type")
+		if rename:
+			df = df.rename(columns={"x": "x_skeleton", "y": "y_skeleton", "z": "z_skeleton"})
+		edges_array = self.get_edges()
+		edge_types_array = self.get_edge_attribute("edge_type")
+		df_2 = pd.DataFrame(edges_array, columns=["parentid", "vid"])
+		df_2["edgetype"] = edge_types_array
 		df_result = pd.concat([df, df_2], axis=1)
-		if not path.parent.exists():
-			path.parent.mkdir(parents=True)
-		df_result.to_csv(path, index=False)
+
+		if first_row_correction:
+			df_result["edgetype"] = ""
+			df_result["vid"] = 0
+			df_result["parentid"] = ""
+			df_result.loc[1:, "vid"] = edges_array[:,1]
+			df_result.loc[1:, "parentid"] = edges_array[:,0]
+			df_result.loc[1:, "edgetype"] = edge_types_array
+
+		if save_path is not None:
+			if not save_path.parent.exists():
+				save_path.parent.mkdir(parents=True)
+			df_result.to_csv(save_path, index=False)
+		return df_result
 
 	@classmethod
 	def from_mtg(cls, mtg_name):

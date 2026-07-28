@@ -16,7 +16,7 @@ import json
 import sys
 sys.path.append("")
 from scripts.utils_skeletonisation import load_json
-from scripts.utils_data import create_skeleton_gt_data
+# from scripts.utils_data import create_skeleton_gt_data
 from scripts.skeleton_graph import SkeletonGraph
 import scripts.visualize_examples as ve
 from scripts.calculate_metrics import Metrics
@@ -635,7 +635,7 @@ class Evaluation():
 
 	def load_gt_data(self, gt_name, pc_name, semantic_name=None):
 		print("Loading", gt_name)
-		S_gt = create_skeleton_gt_data(gt_name, pc_name, pc_semantic_path=semantic_name)
+		S_gt = SkeletonGraph.from_skeleton_gt_data(gt_name, pc_name, pc_semantic_path=semantic_name)
 		# S_gt.df_pc = pd.read_csv(pc_name)
 		S_gt.get_node_order()
 		# S_gt.visualise_graph()

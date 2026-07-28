@@ -489,7 +489,7 @@ class WurTomatoData(Dataset):
                 S_pred.df_pc["semantic"] = self.load_xyz_semantic_array(i)
                 S_pred.visualise_graph(save_name=self.cfg.save_folder / (self.dataset[i]["file_name"].stem+"_input.png"), show_segmented=False)
             print(f"saving skeleton to {save_name}")
-            S_pred.export_as_nodelist(save_name)
+            S_pred.export_as_nodelist(save_path=save_name)
         
         print(f'avg speed {self.cfg["skeleton_method"]} is: {np.mean(speed_test):0.2f} [s]')
         

@@ -51,12 +51,12 @@ ps.set_navigation_style("turntable")
 
 
 semantic_id2rgb_colour = {
-    1: [255, 50, 50],
-    2: [255, 225, 50],
-    3: [109, 255, 50],
-    4: [50, 167, 255],
-    5: [167, 50, 255],
-    255: [0,0,0],
+    1: [255, 50, 50], # leaves
+    2: [255, 225, 50], # main stem
+    3: [109, 255, 50], # pole
+    4: [50, 167, 255], # side stem
+    5: [167, 50, 255], # pot / node
+    255: [0,0,0], # noise
 }
 # Find the maximum semantic ID to determine the size of the array
 max_id = max(semantic_id2rgb_colour.keys())
@@ -65,6 +65,53 @@ rgb_array = np.zeros((max_id + 1, 3), dtype=np.uint8)
 # Populate the array with the RGB values
 for key, value in semantic_id2rgb_colour.items():
     rgb_array[key] = value
+
+def rotate_arround(center, save_dir, save_name=""):
+    # Center of the plant (change if needed)
+    # center = np.array([0.0, 0.0, 0.0])
+
+    radius = 80     # distance from plant (adjust as needed)
+    height = 1      # vertical offset
+    axis= "z"
+
+    for i in range(100):
+        angle = (i / 100) * 2 * np.pi
+
+        if axis == "z":
+            # rotate in XY plane (most common top-down axis)
+            cam_pos = center + np.array([
+                radius * np.cos(angle),
+                radius * np.sin(angle),
+                height
+            ])
+
+        elif axis == "x":
+            # rotate in YZ plane
+            cam_pos = center + np.array([
+               height,
+                radius * np.cos(angle),
+                radius * np.sin(angle)
+            ])
+
+        elif axis == "y":
+            # rotate in XZ plane
+            cam_pos = center + np.array([
+                radius * np.cos(angle),
+                height,
+                radius * np.sin(angle)
+            ])
+
+        else:
+            raise ValueError("axis must be 'x', 'y', or 'z'")
+
+        # Look at plant center
+        ps.look_at(cam_pos, center)
+
+        time.sleep(0.05)
+
+        screenshot_path = save_dir / f"{Path(save_name).stem}_rotation_{i:03d}.png"
+        ps.screenshot(filename=str(screenshot_path))
+        # crop_image(screenshot_path)
 
 def pred2colors(pred):
     color_mapping = { 
@@ -178,13 +225,12 @@ def add_pc(name="point cloud", pc=None, colors=None, distances=None, normals=Non
             if isinstance(colors, np.ndarray):
                 if colors.ndim==1: ## means it are labels -> convert those to colours:
                     colors=rgb_array[colors.astype(int)]
-
         else:  
             colors = np.zeros(pc.shape)
             colors[:, :] = [28,99,227] # blue colour
         ps_cloud.add_color_quantity("colors", np.asarray(colors)/255, enabled=True)
         if distances is not None:
-            ps_cloud.add_scalar_quantity("distances", np.asarray(distances), cmap="jet", enabled=True)
+            ps_cloud.add_scalar_quantity("distances", np.asarray(distances), cmap="viridis", enabled=True)
         if scalars is not None:
             ps_cloud.add_scalar_quantity("scalars", np.asarray(scalars), enabled=True)
         if normals is not None:
@@ -229,6 +275,8 @@ def vis(pc=None, colors=None, nodes=None, node_order=None, edges=None, edges_typ
         time.sleep(0.1)
         ps.screenshot(filename=str(save_name))
         crop_image(save_name)
+        # rotate_arround(center = pc.mean(0), save_dir=save_dir)
+
 
     if show:
         print("Press q to quit...")
