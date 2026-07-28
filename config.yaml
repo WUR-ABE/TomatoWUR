@@ -1,10 +1,10 @@
 ##config_file
 project_dir: "data/"
 project_code: TomatoWUR
-url: data.4tu.nl/ndownloader/items/e2c59841-4653-45de-a75e-4994b2766a2f/versions/2
+url: data.4tu.nl/ndownloader/items/e2c59841-4653-45de-a75e-4994b2766a2f/versions/3
 
 data:
-  annot_version: 0-paper-2Dto3D
+  annot_version: 0-paper-2Dto3D_improved
   ann_dir: ${project_dir}/${project_code}/ann_versions/${data.annot_version}/annotations
   img_dir: ${project_dir}/${project_code}/images/
   pointcloud_dir: ${project_dir}/${project_code}/point_clouds/
