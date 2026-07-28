@@ -416,7 +416,27 @@ def findBottomCenterRoot(points, semantic, method="center"):
 
     return idx
 
+def undirected2directed(edge_list, root=0):
+    edge_list = np.unique([sorted(e) for e in edge_list], axis=0)
 
+    next_edge_list = []
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        temp_edge_list = edge_list.copy()
+        edge_list = []
+        for edge in temp_edge_list:
+            if edge[0] == node:
+                next_edge_list.append(edge)
+                stack.append(edge[1])
+            elif edge[1] == node:
+                next_edge_list.append(edge[::-1])
+                stack.append(edge[0])
+            else:
+                edge_list.append(edge)
+
+    edge_list = np.array(next_edge_list)
+    return edge_list
 
 # if __name__ == "__main__":
 # 	import yaml
