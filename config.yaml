@@ -1,6 +1,5 @@
 ##config_file
-# project_dir: "data/"
-project_dir: "/home/agro/w-drive-vision/GARdata/datasets/tomato_plant_segmentation/TomatoWUR_4dataTU/"
+project_dir: "data/"
 project_code: TomatoWUR
 url: data.4tu.nl/ndownloader/items/e2c59841-4653-45de-a75e-4994b2766a2f/versions/3
 
@@ -19,7 +18,7 @@ data:
   json_split: all #   # for hyper parameter optimisation 
   json_path: ${project_dir}/${project_code}/ann_versions/${data.annot_version}/json/${data.json_split}.json
 # run_mode: ["optimisation"]
-run_mode: ["voxel_carving"]
+run_mode: ["visualise"]
 # run_mode: ["skeletonisation"]
 
 # run_mode: ["skeletonisation", "evaluate"] # or ["skeletonization", "evaluate"]

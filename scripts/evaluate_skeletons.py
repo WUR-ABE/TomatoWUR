@@ -698,7 +698,7 @@ if __name__ == "__main__":
 	# obj.parents_only = False
 	# obj.evaluate_pairs_per_nodeorder(vis=False)
 	# obj.evaluate_pairs(vis=False, evaluate_gt=config["evaluation"]["evaluate_gt"])
-	obj.evaluate_pred(pred_name=Path("Harvest_01_PotNr_95"), vis=True, evaluate_gt=False)
+	obj.evaluate_pred(pred_name=Path("Harvest_01_PotNr_95"), vis=True, evaluate_gt=True)
 	# obj.evaluate_pred(pred_name="Harvest_01_PotNr_95", vis=True, evaluate_gt=True)
 
 
