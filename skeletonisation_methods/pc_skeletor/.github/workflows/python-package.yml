@@ -1,0 +1,31 @@
+name: Test PC Skeletor code
+
+on: [ push ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10" ]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: 'Install dependencies'
+        run: |
+          pip install --upgrade pip setuptools
+          pip install pip==21.3.1
+          pip install numpy --use-deprecated=legacy-resolver
+          pip install charset_normalizer
+          pip install -r requirements.txt
+          pip install .
+      - name: 'Test PC Skeletor'
+        run: |
+          pwd
+          ls -la
+          pytest tests
