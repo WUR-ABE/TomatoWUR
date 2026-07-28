@@ -1,8 +1,9 @@
 ################################################################
-# Author     : Bart van Marrewijk                              #
-# Contact    : bart.vanmarrewijk@wur.nl                        #
-# Date       : 30-05-2024                                      #
-# Description: Code related to the TomatoWUR dataset           #
+# Author     : Bart van Marrewijk
+# Contact    : bart.vanmarrewijk@wur.nl
+# Date       : 19-05-2026
+# Description: Code related to the TomatoWUR dataset, including 
+# skeletonisation methods of point cloud to plant traits paper 
 ################################################################
 
 # Usage: see if__name__
@@ -15,7 +16,9 @@ import numpy as np
 # import open3d as o3d
 # import matplotlib.pyplot as plt
 import json
-import matplotlib.pyplot as plt
+import natsort
+
+import networkx as nx
 
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -29,32 +32,23 @@ import polyscope as ps
 # import yaml
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from scripts.utils_data import create_skeleton_gt_data
-from scripts.utils_skeletonisation import findBottomCenterRoot#convert_segmentation2skeleton, evaluate_skeleton
+from scripts.utils_skeletonisation import findBottomCenterRoot, undirected2directed#convert_segmentation2skeleton, evaluate_skeleton
 from scripts import skeleton_graph
 from scripts import visualize_examples as ve
 from scripts import evaluate_semantic_segmentation
 from scripts.evaluate_skeletons import Evaluation
 from scripts import config
+from scripts.nodes_to_graph import nodes_to_graph
 
 from skeletonisation_methods.plantscan3d import xu
-
-semantic_id2rgb_colour = {
-    1: [255, 50, 50],
-    2: [255, 225, 50],
-    3: [109, 255, 50],
-    4: [50, 167, 255],
-    5: [167, 50, 255],
-    6: [255,255,255], ## represent class 255
-}
-# Find the maximum semantic ID to determine the size of the array
-max_id = max(semantic_id2rgb_colour.keys())
-# Create an array where index corresponds to the semantic ID
-rgb_array = np.zeros((max_id + 1, 3), dtype=np.uint8)
-# Populate the array with the RGB values
-for key, value in semantic_id2rgb_colour.items():
-    rgb_array[key] = value
+import time
 
 
+
+def create_folder(folder_name):
+    folder_name = Path(folder_name)
+    if not folder_name.exists():
+        folder_name.mkdir()
 
 class WurTomatoData(Dataset):
     """
@@ -66,7 +60,7 @@ class WurTomatoData(Dataset):
 
     Author     : Bart M. van Marrewijk
     Contact    : bart.vanmarrewijk@wur.nl
-    Date       : 20-03-2025
+    Date       : 19-05-2026
 
     Example usage:
 
@@ -84,10 +78,15 @@ class WurTomatoData(Dataset):
     """
 
     def __init__(self, **kwargs):
-        config_data = config.Config("config.yaml")
+        config_data = config.init_config(**kwargs)
+        ## set to self.
+        for key, value in config_data.items():
+            setattr(self, key, value)
 
+        self.cfg = config_data
         # self._set_attributes(config_data)
-        self.__dict__.update(config_data.__dict__)
+        # self.__dict__.update(config_data.__dict__)
+        # self.__dict__.update(config_data.__dict__["_content"])
 
         # If the data folder can not be found then ask to download the data
         if not (self.project_dir / self.project_code).exists():
@@ -101,6 +100,9 @@ class WurTomatoData(Dataset):
         ## open annotation file
         with open(self.data.json_path, "r") as f:
             self.dataset = json.load(f)
+
+        # Apply natsort to self.dataset based on "file_name"
+        self.dataset = natsort.natsorted(self.dataset, key=lambda x: str(x["file_name"]))
         for x in self.dataset:
             for key, value in x.items():
                 if key=="images" or key=="images_seg" or key=="genotype":
@@ -111,7 +113,10 @@ class WurTomatoData(Dataset):
 
         self.S_gt = None
         self.camera_specs = None
-        print("Successfully loaded the WURTomato dataset")
+
+        if not self.cfg.save_folder.exists():
+            self.cfg.save_folder.mkdir(True, True)
+        print(f"Successfully loaded the WURTomato dataset split: {self.cfg.data.json_split} N={len(self.dataset)}")
 
     # # Download LastSTRAW data file in zip format
     def __download(self):
@@ -131,7 +136,7 @@ class WurTomatoData(Dataset):
 
             response = requests.get("https://" + str(self.url), stream=True)
             if response.status_code == 200:
-                print("Downloading, this may take a while (TomatoWUR is 3.36GB)...")
+                print("Downloading, this may take a while (TomatoWUR is 3.4GB)...")
                 total_size = int(response.headers.get('content-length', 0))  # Get total size in bytes
                 block_size = 8192  # Or whatever chunk size you want
                 progress_bar = tqdm(total=total_size, unit='iB', unit_scale=True)
@@ -232,64 +237,42 @@ class WurTomatoData(Dataset):
     def visualise(self, index=0):
         self.load_graph(index)
         print(f'Visualising {self.dataset[index]["file_name"].stem}')
-        ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=self.S_gt.get_colours_pointcloud())
+        ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=self.S_gt.get_colours_pointcloud(), save_name=self.cfg.save_folder/"image.png")
 
-    def visualise_semantic(self, index, semantic_name= "semantic"):
+    def visualise_semantic(self, index=0, semantic_name= "semantic"):
         self.load_graph(index)
         print(f'Visualising semantic {self.dataset[index]["file_name"].stem}')
-        labels = self.S_gt.get_semantic_pointcloud(semantic_name=semantic_name).astype(int)
-        labels[labels==255]=6 # convert noise labels to colour id 6
-        colours = rgb_array[labels].copy()
-        ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=colours)
+        labels = self.S_gt.get_semantic_pointcloud(semantic_name=semantic_name)
+        ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=labels)
+
+    def visualise_input(self, index=0, semantic_name= "semantic"):
+        self.load_graph(index)
+
+        pcd_filtered, semantic_filtered = self.get_filtered_data(index)
+        print(f'Visualising semantic {self.dataset[index]["file_name"].stem}')
+        ve.vis(pc = pcd_filtered, colors=semantic_filtered, save_name=self.cfg.save_folder/"image.png")
 
         ## visualising semantics with nodes
         # labels = self.S_gt.get_semantic_pointcloud(semantic_name="semantic_with_nodes")
         # colours = rgb_array[labels.astype(int)].copy()
         # ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=colours)
-    
-            ## visualising semantics with nodes
-    def visualise_instances(self, index=2, semantic_name="leaf_stem_instances"):
-    #     'leaf_stem_instances', 'leaf_instances',
-    #    'stem_instances', 'node_instances'
-        self.load_graph(index)
-        labels = self.S_gt.get_semantic_pointcloud(semantic_name=semantic_name).astype(int)
-        # labels[labels==255]=6 # convert noise labels to colour id 6
-        unique_labels = np.unique(labels)
-        cmap = plt.get_cmap('tab20', len(unique_labels))
-        label_to_color = {}
-        for i, label in enumerate(unique_labels):
-            if label == -1:
-                label_to_color[label] = np.array([0, 0, 0])  # black for -1
-            else:
-                label_to_color[label] = np.array(cmap(i)[:3]) * 255
-        colours = np.array([label_to_color[label] for label in labels.flatten()], dtype=np.uint8)
-        ve.vis(pc = self.S_gt.get_xyz_pointcloud(), colors=colours)
 
-
-    def create_images_giphy(self):
-        # Loop to rotate and capture frames
-        n_frames = 36
-        for i in range(n_frames):
-            angle_deg = i * (360 / n_frames)
-            # Set view by rotating around z axis
-            # Example: rotate camera around the z-axis at a fixed radius
-            radius = 1  # Adjust as needed
-            center = np.mean(self.S_gt.get_xyz_pointcloud(), axis=0)
-            angle_rad = np.deg2rad(angle_deg)
-            camera_position = center + radius * np.array([np.cos(angle_rad), np.sin(angle_rad), 0.5])
-            up_dir = np.array([0, 0, 1])
-            ps.look_at_dir(camera_location=camera_position, target=center, up_dir=up_dir)
-
-            # Draw the scene and save a screenshot
-            ps.screenshot(f"frames/frame_{i:03d}.png", transparent_bg=False)
-
-        # Optional: close viewer
-        ps.clear_user_callback()
-
-    def visualise_skeleton(self, index, parent_nodes_only=True):
+    def visualise_skeleton(self, index=0, parent_nodes_only=False, apply_filtering=False):
         print(f'Visualising skeleton {self.dataset[index]["file_name"].stem}')
         self.load_graph(index)
-        self.S_gt.visualise_graph()
+        ## for graph in section 2
+        if parent_nodes_only:
+            self.S_gt.filter(keep_parents_only=True, node_order=100)
+        apply_filtering=False
+        if apply_filtering: 
+            self.S_gt.gaussian_smoothing()
+            self.S_gt.get_edge_type()
+            self.S_gt.line_fitting_3d()
+            self.S_gt.get_edge_type()
+            self.S_gt.simplify()
+            self.S_gt.get_edge_type()
+
+        self.S_gt.visualise_graph(save_name=self.cfg.save_folder/"image.png", show_segmented=True)
 
 
     def run_semantic_evaluation(self, dt_graph_dir = Path("./Resources/output_semantic_segmentation")):
@@ -299,57 +282,194 @@ class WurTomatoData(Dataset):
 
     def run_skeleton_evaluation(self):
         # folder = Path(self.cfg["folder"])
-        dt_graph_dir = Path("Resources/output_skeleton") / self.cfg["skeleton_method"]
-        obj = Evaluation(self.data.pointcloud_dir, dt_graph_dir, gt_json=self.data.json_path)
-        obj.evaluate_pairs(vis=False, evaluate_gt=self.cfg["evaluation"]["evaluate_gt"])
-
-
-    def nodes2edges(self, points, nodes, method="xu", **kwargs):
-        if method == "xu":
-            nodes, edges, edge_type = xu.xu_method_connect_points(nodes, kwargs["parents"], kwargs["mtg"])
-            return nodes, edges, edge_type
-        else:
-            raise NotImplementedError
+        print(f"Evaluating skeletons in: {self.cfg.save_folder}")
+        obj = Evaluation(self.data.pointcloud_dir, self.cfg.save_folder, **self.cfg.evaluate)
+        obj.evaluate_pairs(vis=self.cfg.evaluate.vis)
     
-        
+    def run_single_skeleton_evaluation(self, plant_id="Harvest_01_PotNr_80"):
+        # folder = Path(self.cfg["folder"])
+        print(f"Evaluating skeletons in: {self.cfg.save_folder}")
+        obj = Evaluation(self.data.pointcloud_dir, self.cfg.save_folder, **self.cfg.evaluate)
+        save_name = self.cfg.save_folder / (plant_id+".csv")
+        if self.cfg.debug_plant:
+            save_name = self.cfg.save_folder / ( self.cfg.debug_plant+".csv")
+                       
+        obj.evaluate_pred(pred_name=save_name, vis=True)
+
+            
     def run_semantic_segmentation(self):
         semseg_url = "https://github.com/WUR-ABE/2D-to-3D_segmentation"
         print(f"Not implemented, please have look at following git: f{semseg_url}")
 
+    def run_skeletonisation_optimisation(self):
+        config_copy = self.cfg.copy()
+        combos = config.create_config_list(self.cfg[self.cfg["skeleton_method"]])
+        self.save_folder = self.save_folder / "optimisation"
+        optimisation_folder = self.save_folder
+        create_folder(self.save_folder)
+        if not self.save_folder.exists():
+            self.save_folder.mkdir()
+        with open(self.save_folder / "optimisation_settings.json", "w") as f:
+            json.dump(combos, f, indent=4)
 
-    def run_skeletonisation(self, method = "xu", visualise=False):
-        save_folder = Path("Resources/output_skeleton")
+        for i, combi in enumerate(combos):
+            self.cfg.save_folder = optimisation_folder / str(i)
+            create_folder(self.cfg.save_folder)
+            self.cfg[self.cfg["skeleton_method"]].update(**combi)
+            self.run_skeletonisation()
+            self.run_skeleton_evaluation()
+  
 
+    def run_skeletonisation(self, visualise=False):
+        # save_folder = Path("Resources/output_skeleton_paper3")
+        config.save_config(self.cfg, self.save_folder / "config.yaml")
+
+        speed_test = []
         for i in tqdm(range(len(self))):
             print(f'Running skeletonisation on {self.dataset[i]["file_name"]}')
-            # if self.dataset[i]["file_name"].stem!="Harvest_01_PotNr_293":
-            #     continue
+            if self.cfg.debug_plant:
+                if self.dataset[i]["file_name"].stem!=self.cfg.debug_plant:
+                    continue
             pcd = self.load_xyz_array(i)
             semantic = self.load_xyz_semantic_array(i)
             pcd_filtered, semantic_filtered = self.get_filtered_data(i)
 
-            root_idx = findBottomCenterRoot(pcd_filtered, semantic_filtered, method=self.cfg["root_method"])
+            t0=time.time()
+            if self.root_method=="gt":
+                root_pos = self.S_gt.G.nodes[0]["pos"]
+                pcd_filtered = np.vstack([root_pos, pcd_filtered])
+                semantic_filtered = np.insert(semantic_filtered, 0, 2)
+                root_idx = 0
+                # raise NotImplementedError
+            else:
+                root_idx = findBottomCenterRoot(pcd_filtered, semantic_filtered, method=self.root_method)
+            print("root_position", pcd_filtered[root_idx])
 
             if self.cfg["skeleton_method"]=="xu":
                 binaratio = self.cfg["xu"]["binratio"]
                 n_neighbors = self.cfg["xu"]["n_neighbors"]
 
                 positions, parents, mtg = xu.xu_method(pcd_filtered, root_idx=root_idx, binratio=binaratio, nearest_neighbour=n_neighbors, vis=False)
-                nodes, edges, edge_type = self.nodes2edges(pcd_filtered, positions, method=self.cfg["xu"]["nodes2edges"], parents=parents, mtg=mtg)
-                save_name = save_folder / "xu" / (self.dataset[i]["file_name"].stem+".csv")
+                nodes, edges, _ = nodes_to_graph(pcd_filtered, positions, root_idx=root_idx, method=self.cfg["xu"]["nodes2edges"], parents=parents, mtg=mtg)
+                S_pred = skeleton_graph.SkeletonGraph()
+                S_pred.load(nodes, edges, edge_types=None, df_pc=pd.DataFrame(pcd, columns=["x", "y", "z"]), name=self.dataset[i]["file_name"].stem)
+                S_pred.get_edge_type(**self.cfg["xu"]["graph2tree"])
 
+                save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
+
+            elif self.cfg["skeleton_method"]=="som":
+                from skeletonisation_methods.som import som
+                self.cfg["som"]["init"]["x"] = round(len(pcd_filtered)/self.cfg["som"]["points_per_node"]) ## empirecally
+                self.cfg["som"]["init"]["y"] = 1
+
+                nodes = som.som_method(pcd_filtered, cfg=self.cfg["som"])
+                nodes, edges, _ = nodes_to_graph(pcd_filtered, nodes, root_idx=root_idx, method=self.cfg["som"]["nodes2edges"])
+
+                S_pred = skeleton_graph.SkeletonGraph()
+                S_pred.load(nodes, edges, edge_types=None, df_pc=pd.DataFrame(pcd, columns=["x", "y", "z"]), name=self.dataset[i]["file_name"].stem)
+                S_pred.get_edge_type(**self.cfg["som"]["graph2tree"])
+
+                save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
+                # ve.vis(nodes=nodes, edges=edges)
+
+            elif self.cfg["skeleton_method"]=="voxel":
+                import skeletonisation_methods.voxel.fill_voxel as fill_voxel
+                nodes, edges, root_idx = fill_voxel.main(pcd_filtered,
+                                                        root_idx=root_idx,
+                                                         **self.cfg.voxel)
+                                                #     voxel_size = self.cfg["voxel"]["voxel_size"],
+                                                #   return_pc=self.cfg["voxel"]["nodes2edges_input"])
+                if self.cfg["voxel"]["nodes2edges"] is not None:
+                    nodes, edges, edge_type = nodes_to_graph(pcd_filtered, nodes, root_idx=root_idx, method=self.cfg["voxel"]["nodes2edges"])
+
+                S_pred = skeleton_graph.SkeletonGraph()
+                S_pred.load(nodes, edges, edge_types=None, df_pc=pd.DataFrame(pcd, columns=["x", "y", "z"]), name=self.dataset[i]["file_name"].stem)
+                S_pred.get_edge_type(**self.cfg["voxel"]["graph2tree"])
+                # S_pred.gaussian_smoothing(var0=0.3, var1=0.3, indices=[0,1,2], node_order_filtering=False)
+                # S_pred.gaussian_smoothing(var0=0.25, var1=0.25, indices=[0,1], node_order_filtering=False)
+
+                # S_pred.get_edge_type(angle_between_trunk_and_lateral=60)
+                # edges = S_pred.get_edges()
+                # nodes = S_pred.get_node_attribute()
+                # S_pred.visualise_graph()
+                # nodes, edges, edge_type = nodes_to_graph(input_pc, nodes, method=                # nodes, edges, edge_type = nodes_to_graph(input_pc, nodes, method=self.cfg["voxel"]["nodes2edges"])
+                save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
+
+            elif self.cfg["skeleton_method"]=="laplacian":
+                from skeletonisation_methods.pc_skeletor.pc_skeletor import LBC
+                lbc = LBC(pcd_filtered, **self.cfg["laplacian"]["settings_lbc"])
+                lbc.extract_skeleton()
+                lbc.extract_topology()
+                nodes = np.asarray(lbc.skeleton.points)
+
+                print("BART 20250805 changed root_dix from none to root_idx in laplacian!!")
+                nodes, edges, _ = nodes_to_graph(pcd_filtered, nodes, root_idx=root_idx, method=self.cfg["laplacian"]["nodes2edges"])
+
+                S_pred = skeleton_graph.SkeletonGraph()
+                S_pred.load(nodes, edges, edge_types=None, df_pc=pd.DataFrame(pcd, columns=["x", "y", "z"]), name=self.dataset[i]["file_name"].stem)
+                S_pred.get_edge_type(**self.cfg["laplacian"]["graph2tree"])
+                
+                ## including simplified skeleton by LBC method:                
+                # nodes, edges, edge_type = nodes_to_graph(pcd_filtered, np.asarray(lbc.topology.points), method=self.cfg["laplacian"]["nodes2edges"])
+                
+                ## DEBUGGING
+                debug = False
+                # debug=True
+                if debug:
+                    # ve.vis(pc=pcd_filtered)
+                    # ve.vis(pc=np.asarray(lbc.contracted_point_cloud.points))
+                    # ve.vis(pc=np.asarray(lbc.skeleton.points))
+                    # temp = skeleton_graph.relabel(lbc.skeleton_graph)
+                    # ve.vis(pc=pcd_filtered, nodes=np.array([temp.nodes[node]['pos'] for node, degree in temp.degree()]),edges=np.asarray(temp.edges))
+                    # ve.vis(pc=pcd_filtered, nodes=np.asarray(lbc.topology.points),
+                    #        edges=np.asarray(lbc.topology_graph.edges))
+                    ## graph after simplication 
+                    # nodes = np.asarray(lbc.topology.points)
+                    # edges = undirected2directed(np.asarray(lbc.topology_graph.edges))
+                    ve.vis(pc=pcd_filtered, nodes=nodes, edges=edges, edges_type=S_pred.get_attributes()["edge_type"])
+                
+                save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
+
+            elif self.cfg["skeleton_method"]=="laplacian_semantic":
+                from skeletonisation_methods.pc_skeletor.pc_skeletor import SLBC
+                temp_dict = {'trunk': pcd_filtered[semantic_filtered==2,:], 'branches': pcd_filtered[semantic_filtered==4,:]}
+                lbc = SLBC(temp_dict, **self.cfg["laplacian_semantic"]["settings_lbc"])
+                lbc.extract_skeleton()
+                lbc.extract_topology()
+                nodes = np.asarray(lbc.skeleton.points)
+                nodes, edges, _ = nodes_to_graph(pcd_filtered, nodes, root_idx=root_idx, method=self.cfg["laplacian_semantic"]["nodes2edges"])
+
+                S_pred = skeleton_graph.SkeletonGraph()
+                S_pred.load(nodes, edges, edge_types=None, df_pc=pd.DataFrame(pcd, columns=["x", "y", "z"]), name=self.dataset[i]["file_name"].stem)
+                S_pred.get_edge_type(**self.cfg["laplacian_semantic"]["graph2tree"])
+
+                ## including simplified skeleton by LBC method:                
+                # nodes, edges, edge_type = nodes_to_graph(pcd_filtered, np.asarray(lbc.topology.points), method=self.cfg["laplacian"]["nodes2edges"])
+                
+                save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
+
+            elif self.cfg["skeleton_method"]=="adtree":
+                from skeletonisation_methods.adtree import Adtree_debugging
+                save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
+                Adtree_debugging.run_adtree(adtree_path=self.cfg.adtree.adtree_path, xyz_array=pcd_filtered,
+                                            output_name=save_name)
             else:
                 raise NotImplementedError(f'{self.cfg["skeleton_method"]} method not implemented.')
                 exit()
-
-            S_pred = skeleton_graph.SkeletonGraph()
-            S_pred.load(nodes, edges, edge_types=edge_type, df_pc=pd.DataFrame(pcd, columns=["x", "y", "z"]), name=self.dataset[i]["file_name"].stem)
+            ## determine speed of algorithm
+            speed_test.append(time.time()-t0)
+            
             S_pred.get_node_order()
+            # ve.vis(pc=pcd, nodes=nodes, edges=edges, edges_type=S_pred.get_attributes()["edge_type"][1:])
+
             if visualise:
-                S_pred.visualise_graph()
+                S_pred.df_pc["semantic"] = self.load_xyz_semantic_array(i)
+                S_pred.visualise_graph(save_name=self.cfg.save_folder / (self.dataset[i]["file_name"].stem+"_input.png"), show_segmented=False)
             print(f"saving skeleton to {save_name}")
             S_pred.export_as_nodelist(save_name)
-
+        
+        print(f'avg speed {self.cfg["skeleton_method"]} is: {np.mean(speed_test):0.2f} [s]')
+        
 
 
     def get_2d_images(self, index=0):
@@ -370,26 +490,6 @@ class WurTomatoData(Dataset):
         if self.camera_specs is None:
             self.camera_specs = camera_calib.CameraClass(calib_folder=self.data.camera_poses_dir) 
 
-    def write_nerfstudio_transform(self, add_masks=True, index=0):
-        """
-        Writes the camera specifications and associated data in the Nerfstudio format.
-        Credits to the AUTOLab at UC Berkeley
-        Args:
-            add_masks (bool, optional): Whether to include masks in the output. Defaults to True.
-            index (int, optional): Index of the dataset to process. Defaults to 0.
-        """
-
-        from scripts.utils_data import nerfstudio_writer
-
-        self.load_camera_specs()
-        nerfstudio_dict = self.camera_specs.get_nerfstudio_format()
-
-        images_path, images_seg_path = self.get_2d_images(index=index)
-        xyz = self.load_xyz_array(index)
-
-        nerfstudio_writer(nerfstudio_dict, rgb_images_path=images_path, seg_images_path=images_seg_path, xyz=xyz, add_masks=add_masks)
-
-        
     def voxel_carving(self, index=0):
         """
         Create 3D point clouds using voxel carving (high similarity with original data but not exactly the same)
@@ -403,62 +503,38 @@ class WurTomatoData(Dataset):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Visualise Wur Tomato Data.")
-
-    # Add arguments for each visualization option
-    parser.add_argument("--visualise", type=int, help="Visualise data at given index")
-    parser.add_argument("--visualise_semantic", type=int, help="Visualise semantic data at given index")
-    parser.add_argument("--visualise_skeleton", type=int, help="Visualise skeleton data at given index")
-    # parser.add_argument("--visualise_inference", type=str, help="Visualise inference from given file path")
-    # parser.add_argument("--run_geodesic", type=int, help="Run geodesic example")
-    parser.add_argument("--run_semseg_evaluation", action='store_true', help="Run evaluation example")
-    parser.add_argument("--run_skeleton_evaluation", action='store_true', help="Run evaluation example")
-    # skeletonisation
-    parser.add_argument("--run_skeleton", action='store_true', help="debugging")
-    ## debugging
-    parser.add_argument("--run_debugging", type=int, help="debugging")
-    parser.add_argument("--run_registration", action='store_true', help="debugging")
-
+    parser = argparse.ArgumentParser(description="Loading wurTomato dataset")
+    parser.add_argument("--config", type=str, default= "config.yaml", help="debugging")
 
     # Parse the arguments
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
 
     # Create an instance of WurTomatoData
-    obj = WurTomatoData()
-    # obj.visualise_semantic(index=2)
-    # obj.visualise_instances()
-    # obj.write_nerfstudio_transform()
-    # exit()
-    # obj.voxel_carving()
-    # exit()
+    obj = WurTomatoData(cfg_filename=args.config, overrides=unknown)
+    print(obj.cfg.run_mode)
 
-    # visualissation
-    if args.visualise is not None:
-        obj.visualise(args.visualise)
-    elif args.visualise_semantic is not None:
-        obj.visualise_semantic(args.visualise_semantic)
-    elif args.visualise_skeleton is not None:
-        obj.visualise_skeleton(args.visualise_skeleton)
-    ## run evaluation
-    elif args.run_semseg_evaluation:
-        obj.run_semantic_evaluation()
-    elif args.run_skeleton_evaluation:
-        obj.run_skeleton_evaluation()
-    ## run skeletonisation example
-    elif args.run_skeleton:
-        obj.run_skeletonisation()
-
-    # elif args.run_debugging is not None:
-    #     obj.run_debugging(args.run_debugging)
-    # elif args.run_evaluation:
-    #     obj.run_evaluation()
-    # elif args.run_registration:
-    #     obj.run_registration()
+    for run_mode in obj.cfg.run_mode:
+        if run_mode=="voxel_carving":
+            obj.voxel_carving()
+        elif run_mode=="skeletonisation":
+            obj.run_skeletonisation(visualise=obj.vis_skeleton)
+        elif run_mode=="evaluate":
+            obj.run_skeleton_evaluation()
+        elif run_mode=="evaluate_semantic":
+            obj.run_semantic_evaluation()
+        elif run_mode=="optimisation":
+            obj.run_skeletonisation_optimisation()
+        elif run_mode=="visualise":
+            for i, obj_i in enumerate(obj):
+                print(i, obj_i.name)
+                obj_i.visualise_graph()
+        elif run_mode=="visualise_semantic":
+            obj.visualise_semantic()
+        elif run_mode=="visualise_skeleton":
+            obj.visualise_skeleton()
+        elif run_mode=="evaluate_single":
+            obj.run_single_skeleton_evaluation(obj.cfg.debug_plant)
+            print(f"WARNING Please check run_mode: {run_mode}")
+        else:
+            print("runmodes is not valid, please check")
     
-
-# if __name__=="__main__":
-#     obj = WurTomatoData()
-#     # obj.visualise(0)
-#     # obj.visualise_semantic(0)
-#     # obj.visualize_skeleton(0)
-#     # obj.visualize_inference("./work_dir/debug/result/Harvest_01_PotNr_179.txt")

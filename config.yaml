@@ -1,47 +1,234 @@
 ##config_file
-project_dir: "data/"
+# project_dir: "data/"
+project_dir: "/home/agro/w-drive-vision/GARdata/datasets/tomato_plant_segmentation/TomatoWUR_4dataTU/"
 project_code: TomatoWUR
 url: data.4tu.nl/ndownloader/items/e2c59841-4653-45de-a75e-4994b2766a2f/versions/3
 
+config_version: 1.0
 data:
-  annot_version: 0-paper-2Dto3D_improved
+  annot_version: 0-paper-2Dto3D_improved # for gt semseg and hyper parameter optimisation
+  # annot_version: 1-paper3-swin3d-inference # for inference and hyper parameter optimisation
+  # annot_version: 1-paper3-swin3d-inference-train0
+
   ann_dir: ${project_dir}/${project_code}/ann_versions/${data.annot_version}/annotations
   img_dir: ${project_dir}/${project_code}/images/
   pointcloud_dir: ${project_dir}/${project_code}/point_clouds/
   camera_poses_dir: ${project_dir}/${project_code}/camera_poses/
-  json_split: test
+
+  # json_split: manual_measurements_only ## experiment 3
+  json_split: all #   # for hyper parameter optimisation 
   json_path: ${project_dir}/${project_code}/ann_versions/${data.annot_version}/json/${data.json_split}.json
+# run_mode: ["optimisation"]
+run_mode: ["voxel_carving"]
+# run_mode: ["skeletonisation"]
 
-run_mode: ["skeletonization", "evaluation"] # or ["skeletonization", "evaluation"]
-skeleton_method: "xu"
+# run_mode: ["skeletonisation", "evaluate"] # or ["skeletonization", "evaluate"]
 
-root_method: "circle_fit" # center or bottom or line or pyransac3d, cylinderfit, circle_fit
+skeleton_method: "som" # "xu", "som", "voxel", "laplacian", "laplacian_semantic", "adtree"
+
+# save_folder: Resources/output_skeleton_paper3/${data.annot_version}/${skeleton_method}
+save_folder: ./debug/
+# debug_plant: Null
+debug_plant: Harvest_01_PotNr_80
+vis_skeleton: True
+
+
+# best_settings: Resources/output_skeleton_paper3/${data.annot_version}/${skeleton_method}/optimisation/best_settings.json
+best_settings: null 
+root_method: "gt" # center or bottom or line or pyransac3d, cylinderfit, circle_fit
+
+voxel:
+  nodes2edges: "mst" # xu is build in implementatin of xu, geodesic or euclidean
+  graph2tree:
+    method: "angle_based"
+    angle_between_trunk_and_lateral: 60
+    n_parents: 3 #[0,3]
+
+  voxel_size_stage_1: 2 # default=2 voxel size to create a voxel space before dilation and erosion (should be 2 at least)
+  num_dilations_erosions: 4 # default =4 [1,2,4]
+  voxel_size_stage_2: 4 # default = 4 should be at least two [2,4,6]
+  # return_pc: voxel_stage_2 # default refers to filtered_pc, voxel_stage_1=voxelized point cloud, voxel_stage_2=complete skeleton
+
+  ######### optimisation########
+  # num_dilations_erosions: [2,3,4] # default =4 [1,2,4]
+  # voxel_size_stage_2: [2,4,6] # default = 4 should be at least two [2,4,6]
+    #############################
 xu:
-  binratio: 20
-  n_neighbors: 20
-  # nodes2edges: "xu" # xu is build in implementatin of xu, geodesic or euclidean
-  nodes2edges: "xu" # xu is build in implementatin of xu, geodesic or euclidean
+  nodes2edges: "mst" # xu is build in implementatin of xu, geodesic or euclidean
+  graph2tree:
+    method: "angle_based"
+    angle_between_trunk_and_lateral: 60
+    n_parents: 3 #[0,3]
 
-evaluation:
-  evaluate_gt: False
+  binratio: 20 #default 20 optimal 40
+  # binratio: [10, 20, 40, 60]  
+  n_neighbors: 20 #default 20 optimal 60
+  # n_neighbors: [10, 20, 40, 60]
+som: # +-15 per plant with 10 iterations and x,y=15, 20iteraoins =30seconds
+  nodes2edges: "mst" # xu is build in implementatin of xu, geodesic or euclidean
+  graph2tree:
+    method: "angle_based"
+    angle_between_trunk_and_lateral: 60
+    n_parents: 3 #[0,3]
+
+  weights: "fps" # [fps , random, pca]
+  points_per_node: 400 # default=400
+  ######### optimisation########
+  # points_per_node: [200, 300, 400, 500]
+  #############################
+ 
+  init:
+    # x: 11 # replaced by nodes per point
+    # y: 11
+    input_len: 3
+
+    random_seed: 1
+    neighborhood_function: "bubble"
+    # neighborhood_function: ['gaussian',  'bubble', 'triangle'] # 'mexican_hat' gave error, 'bubble' the best
+    topology: 'rectangular'
+    # topology: ['rectangular', 'hexagonal'] # depnding on method, with gaussian hexagonal is better others do not difer much
+    activation_distance: "euclidean" #all others do not work that good. 'euclidean', 'cosine', 'manhattan', 'chebyshev'
+
+    sigma: 1 # default=1
+    learning_rate: .5 # default=0.5
+
+    ######### optimisation########
+    # sigma: [1, 2, 3]
+    # learning_rate: [0.05, 0.5, 1, 2]
+    #############################
+
+  train:
+    num_iteration: 20 # feault=20, 5 is worse than 10, 20 better than 10..., [10, 20, 40] 
+    # 02_PotNr_200 quantisation error bubble: 5=0.0219, 10= 0.02193, 20=0.02188, 40=0.02189 .. no visible difference...
+    # 02_PotNr_200 quantisation error gaussian: 5=0.02651, 10= 0.02545, 20=0.0252, 40=0.02477 .. no visible difference...
+    # num_iteration: [10, 20, 40]
+    random_order: True
+    verbose: True
+    use_epochs: True
+
+
+laplacian:
+  nodes2edges: "mst" # xu is build in implementatin of xu, geodesic or euclidean
+  graph2tree:
+    method: "angle_based"
+    angle_between_trunk_and_lateral: 60
+    n_parents: 3 #[0,3]
+
+  settings_lbc:
+
+    max_contraction: 2048 # default=2048 If max contraction is low, takes a lot of time to get volume <0.003
+    max_attraction: 1024 # default=1024
+    filter_nb_neighbors: False
+    filter_std_ratio: False
+    termination_ratio: 0.003 #default=0.003 [0.01,  0.007, 0.005, 0.003]
+    max_iteration_steps: 20 #default=20
+    farthest_point_sampling: 0.1 #default=0.1
+
+    init_contraction: 1 #default=1 
+    init_attraction: .5 #default=0.5
+    step_wise_contraction_amplification: 5 #default=5 the higher the number the smoother the result
+
+    ######### optimisation########
+    # init_contraction: [1,2,4] # default=1 -> bart tested 4?
+    # init_attraction: [0.1, .5, 1] #default 0.5
+    # step_wise_contraction_amplification: [2,5,8,10]
+
+  #############################
+laplacian_semantic:
+  nodes2edges: "mst" # xu is build in implementatin of xu, geodesic or euclidean
+  graph2tree:
+    method: "angle_based"
+    angle_between_trunk_and_lateral: 60
+  settings_lbc:
+    max_contraction: 2048 # 2048
+    max_attraction: 1024
+    filter_nb_neighbors: False
+    filter_std_ratio: False
+    termination_ratio: 0.003
+    max_iteration_steps: 20
+
+    init_contraction: 1   #default=1 
+    init_attraction: .5 #default 0.5
+    step_wise_contraction_amplification: 5 ## the higher the number the smoother the result
+    semantic_weighting: 10
+
+    ######### optimisation########
+    # init_contraction: [1,2,4] # default=1 -> bart tested 4?
+    # init_attraction: [0.1, .5, 1] #default 0.5
+    # step_wise_contraction_amplification: [2,5,8,10] ## we removed 1,2 
+    # semantic_weighting: [5,10,20]
+
+
+adtree:
+  adtree_path: /media/agro/PhDBart1/AdTree/build/bin/AdTree
+  nodes2edges: "mst" # xu is build in implementatin of xu, geodesic or euclidean
+
+
+##################################### evaluation settings
+evaluate:
+  vis: True
+  evaluate_gt: False ## set so true if you want to evaluate trait prediction of ground truth
+  node_order_eval_list: [0,1,2,3]
+  false_threshold: 0.02
+  # filter: False
+  parents_only: True
+  gt_json: ${data.json_path}
+  post_processing: ${post_processing}
+
+#################### a method to do post processing
 post_processing:
-  # methods: [f3]
-  methods: [f2, f3, f1, f2, f3, f4, f5, f2]
+  methods: []
+  # methods: [f1, f3, f5, f3] # f6]
+  # methods: [f11, f7, f3] ## voxel methods
   f1:
     gaussian_smoothing:
       var0: 0.25
       var1: 0.25
+      indices: [0,1]
+      node_order_filtering: True
+      num_children: 1
+  f11:
+      gaussian_smoothing:
+        var0: 0.25
+        var1: 1
+        indices: [0,1]
+        node_order_filtering: False
+        num_children: 3
   f2:
     filter:
       node_order: 100000
       keep_parents_only: True
   f3: 
+    get_edge_type: # default
+      method: "angle_based" 
+      angle_between_trunk_and_lateral: 60
+      n_parents: 3
+  f33: 
     get_edge_type: 
+      angle_between_trunk_and_lateral: 60
+      n_parents: 3
+  f333: 
+    get_edge_type: 
+      angle_between_trunk_and_lateral: 60
+      n_parents: 3
   f4: 
     edge_from_filtered:
   f5: 
-    line_fitting_3d:
+    line_fitting_3d: # default
+      line_fit_method: "spline"
+  f6:
+    simplify: # default
+      distance_threshold: 0.001
+      merge_th: 1e6
+      alpha_th: 0.9
+  f7:
+    reconnect_nodes:
 
 
-## Add gaussian filter (see plantscan3d)
 ## Add post optimisation method (see stochastic optimization)
+
+# python3 wurTomato.py --config config.yaml run_mode=[optimisation] skeleton_method=som
+# python3 wurTomato.py --config config.yaml run_mode=[skeletonisation] skeleton_method=som
+# python3 wurTomato.py --config config.yaml run_mode=[skeletonisation, evaluation] data.json_split=manual_measurements_only.json skeleton_method=xu
+
+
