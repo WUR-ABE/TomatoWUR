@@ -53,7 +53,7 @@ def som_method(points_filtered, cfg={}):
         som.random_weights_init(data)
 
     ## visualisation of initial weights
-    # from scripts import visualize_examples as ve
+    # from tomatowur.scripts import visualize_examples as ve
     # ve.vis(pc=data, nodes = som._weights.reshape(som._weights.shape[0]*som._weights.shape[1],3))
 
     if cfg.get("train") is None:

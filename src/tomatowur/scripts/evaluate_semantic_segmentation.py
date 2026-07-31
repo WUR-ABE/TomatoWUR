@@ -7,10 +7,7 @@ from pathlib import Path
 # import torch
 from natsort import natsorted
 
-import sys
-sys.path.append("")
-# from scripts.utils_data import create_skeleton_gt_data
-from scripts.utils_skeletonisation import load_json
+from tomatowur.scripts.utils_skeletonisation import load_json
 
 
 # class runningScore(object):

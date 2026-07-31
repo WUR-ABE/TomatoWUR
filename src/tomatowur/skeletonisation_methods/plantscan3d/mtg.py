@@ -31,11 +31,11 @@ import copy
 
 # import traversal
 # import algo
-from skeletonisation_methods.plantscan3d import traversal
-from skeletonisation_methods.plantscan3d import algo
+from tomatowur.skeletonisation_methods.plantscan3d import traversal
+from tomatowur.skeletonisation_methods.plantscan3d import algo
 
 # from tree import PropertyTree, InvalidVertex
-from skeletonisation_methods.plantscan3d.tree import PropertyTree, InvalidVertex
+from tomatowur.skeletonisation_methods.plantscan3d.tree import PropertyTree, InvalidVertex
 
 
 

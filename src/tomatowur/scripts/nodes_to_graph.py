@@ -1,7 +1,7 @@
 import numpy as np
 
 import networkx as nx
-from scripts.utils_skeletonisation import undirected2directed
+from tomatowur.scripts.utils_skeletonisation import undirected2directed
 
 
 def nodes_to_graph(points=None, nodes=None, root_idx=None, method = "mst", **kwargs):
@@ -38,7 +38,7 @@ def nodes_to_graph(points=None, nodes=None, root_idx=None, method = "mst", **kwa
                  raise ValueError(f"In nodes_to_graph cannot run {method} method with points=None")
             if nodes is None:
                 raise ValueError(f"In nodes_to_graph cannot run {method} method with nodes=None")
-            from skeletonisation_methods.geoskel.geodesic_skeleton import run_geodesic
+            from tomatowur.skeletonisation_methods.geoskel.geodesic_skeleton import run_geodesic
             nodes, edges, edge_type = run_geodesic(points, nodes)
             return nodes, edges, None
 
@@ -47,7 +47,7 @@ def nodes_to_graph(points=None, nodes=None, root_idx=None, method = "mst", **kwa
             if nodes is None:
                 raise ValueError(f"In nodes_to_graph cannot run {method} method with nodes=None")
             
-            from skeletonisation_methods.plantscan3d import xu
+            from tomatowur.skeletonisation_methods.plantscan3d import xu
             nodes, edges, edge_type = xu.xu_method_connect_points(nodes, kwargs["parents"], kwargs["mtg"])
             return nodes, edges, edge_type
         

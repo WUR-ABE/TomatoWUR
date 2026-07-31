@@ -138,7 +138,7 @@ class Skeleton:
                     if i != j:
                         self.delaunay_.add_edge(i, j)
 
-        # from skeletonisation_methods.plantscan3d.xu import k_closest_points_from_ann, connect_componenets
+        # from tomatowur.skeletonisation_methods.plantscan3d.xu import k_closest_points_from_ann, connect_componenets
         # result = k_closest_points_from_ann(coords, k=5, connect_all_points=False)
         # result = connect_componenets(coords, result, k=5)
         # for i in result:
@@ -233,7 +233,7 @@ class Skeleton:
 
         if not self.quiet_:
             print("compute the shortest spanning tree...")
-        from skeletonisation_methods.plantscan3d.xu import points_dijkstra_shortest_path
+        from tomatowur.skeletonisation_methods.plantscan3d.xu import points_dijkstra_shortest_path
         # from xu_method.xu_skeletonisation import points_dijkstra_shortest_path
         # self.get_edge_weight = lambda x, y: self.delaunay_[x][y]['weight']  
         remaniangraph = []
@@ -1068,8 +1068,8 @@ def points_in_cylinder(points, p1, p2, r):
 
 if __name__=="__main__":
     sys.path.append("")
-    import wurTomato
-    from scripts import visualize_examples as ve
+    from tomatowur import wurTomato
+    from tomatowur.scripts import visualize_examples as ve
     import numpy as np
 
     obj = wurTomato.WurTomatoData()

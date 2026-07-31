@@ -32,7 +32,7 @@ __revision__ = " $Id$ "
 #from interface.graph import IRootedGraph, InvalidVertex, InvalidEdge
 #from traversal.tree import pre_order, post_order
 # from traversal import *
-from skeletonisation_methods.plantscan3d.traversal import *
+from tomatowur.skeletonisation_methods.plantscan3d.traversal import *
 
 
 class GraphError(Exception):

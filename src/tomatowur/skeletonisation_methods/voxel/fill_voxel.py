@@ -6,8 +6,8 @@ from scipy import ndimage
 from skimage.morphology import skeletonize #, thin, medial_axis
 import networkx as nx
 
-from scripts import utils_skeletonisation
-from scripts import visualize_examples as ve
+from tomatowur.scripts import utils_skeletonisation
+from tomatowur.scripts import visualize_examples as ve
 
 
 def fill_pc_using_dilation(points: np.ndarray, voxel_size_stage_1: int, num_dilations_erosions: int = 4, **kwargs):

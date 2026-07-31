@@ -19,12 +19,12 @@
 
 
 __docformat__ = "restructuredtext"
-from skeletonisation_methods.plantscan3d import traversal
+from tomatowur.skeletonisation_methods.plantscan3d import traversal
 # import traversal
 
 # try:
 # from tree import InvalidVertex
-from skeletonisation_methods.plantscan3d.tree import InvalidVertex
+from tomatowur.skeletonisation_methods.plantscan3d.tree import InvalidVertex
 
 # except ImportError:
 #     from openalea.container.tree import InvalidVertex

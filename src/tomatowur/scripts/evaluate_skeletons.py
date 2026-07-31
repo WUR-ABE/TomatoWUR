@@ -13,13 +13,10 @@ from scipy.spatial import distance_matrix
 from scipy.optimize import linear_sum_assignment
 import pandas as pd
 import json
-import sys
-sys.path.append("")
-from scripts.utils_skeletonisation import load_json
-# from scripts.utils_data import create_skeleton_gt_data
-from scripts.skeleton_graph import SkeletonGraph
-import scripts.visualize_examples as ve
-from scripts.calculate_metrics import Metrics
+from tomatowur.scripts.utils_skeletonisation import load_json
+from tomatowur.scripts.skeleton_graph import SkeletonGraph
+import tomatowur.scripts.visualize_examples as ve
+from tomatowur.scripts.calculate_metrics import Metrics
 
 ## TODO fix assignmetn problem
 
@@ -683,7 +680,7 @@ class Evaluation():
 			self.evaluate_pred(pred_name=row[1]["file_name"], vis=True)
 
 if __name__ == "__main__":
-	from scripts import config
+	from tomatowur.scripts import config
 	cfg = config.init_config(cfg_filename="config.yaml")
 
 	## original tomatowur
