@@ -11,26 +11,31 @@ Official implementation of [TomatoWUR](https://data.4tu.nl/datasets/e2c59841-465
 **An annotated dataset of tomato plants to quantitatively evaluate segmentation, skeletonisation, and plant trait extraction algorithms for 3D plant phenotyping**
 
 The dataset is related to the paper:
-- [3D plant segmentation: Comparing a 2D-to-3D segmentation method with state-of-the-art 3D segmentation algorithms](https://www.sciencedirect.com/science/article/pii/S1537511025000832)
-- [From point clouds to plant traits: investigation of a pipeline for phenotyping of tomato plants using skeletonisation]()
+- [3D plant segmentation: Comparing a 2D-to-3D segmentation method with state-of-the-art 3D segmentation algorithms](https://doi.org/10.1016/j.biosystemseng.2025.104147)
+- [From point clouds to plant traits: investigation of a pipeline for phenotyping of tomato plants using skeletonisation](https://doi.org/10.1016/j.biosystemseng.2026.104554)
 
 ## Changes:
 - 2025-11-14 published original TomatoWUR repo --> release tag: original_tomatowur_paper
 - 2026-05-27 In point cloud to plant traits paper 4 annotations errors were found. These annotations are added to the 4TU dataset version 3.
-- 2026-07-xx Added updates of point cloud to plant traits paper. This includes.
+- 2026-07-31 Added updates of point cloud to plant traits paper in this REPO. This includes.
     - Improved skeleton evaluation method
     - Additional skeletonisation methods.
+    - deprecated CLI interface -> only config files instead. 
+    ```python3 wurTomato.py --config config.yaml```
+    For reproduceability of Point clouds to plait traits paper we recommend [git](https://github.com/WUR-ABE/point_cloud_to_plant_traits) related to that publication. 
 
 ## Installation
 This software is tested on Python 3.11. To install the dependencies, run:
-```
+```bash
 pip install -r requirements.txt
+## for laplacian skeletonisation also install pc_skeletor
+# pip install -e skeletonisation_methods/pc_skeletor/.
 ```
 
 ## Usage
 Make sure to extract and download the dataset, this will be done automatically if path can not be found:
 ```
-python3 wurTomato.py --visualise 0
+python3 wurTomato.py --config config.yaml
 ```
 For more examples have a look at the example_notebook.ipynb
 
@@ -69,7 +74,7 @@ author = {Bart M. {van Marrewijk} and Tim {van Daalen} and Katarína Smoleňová
 
 ## Related research
 - [2Dto3D segmentation](https://doi.org/10.1016/j.biosystemseng.2025.104147)
-- [Point cloud to plant traits](TODO)
+- [Point cloud to plant traits](https://doi.org/10.1016/j.biosystemseng.2026.104554)
 
 ## Funding
 This research is part of AgrifoodTEF: Test and Experiment Facilities for the Agri-Food Domain (101100622)
