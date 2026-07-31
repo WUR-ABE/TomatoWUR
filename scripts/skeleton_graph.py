@@ -4,11 +4,15 @@ import pandas as pd
 import numpy as np
 import math
 import sys
+from copy import deepcopy
+
+from dataclasses import dataclass
 sys.path.append("")
 from scripts import visualize_examples as ve
-
-def direction(v):
-	return v / np.linalg.norm(v)
+from scripts.postprocessing_methods import gaussian_weight, find_closest_points, create_new_points
+from scripts.calculate_angles import openalea_method, xy_plane_method
+from scripts.graph_to_tree import graph_edges_to_tree, get_single_edge_type, direction
+from scripts.utils_data import get_rotation_matrix
 
 class SkeletonGraph():
 	'''
@@ -178,11 +182,63 @@ class SkeletonGraph():
 		mapping = {node: i for i, node in enumerate(self.G.nodes())}
 		self.G = nx.relabel_nodes(temp_copy, mapping)
 
-		if edge_types is None:
-			self.get_edge_type()
+		# if edge_types is None:
+		# 	self.get_edge_type()
 
 		pass
 
+	@classmethod
+	def from_skeleton_gt_data(cls, skeleton_path, pc_path=None, pc_semantic_path=None):
+		"""
+		Load the skeleton data from the ground truth file and create a SkeletonGraph object.
+
+		Parameters:
+		skeleton_path (str or Path): Path to the ground truth skeleton file.
+		pc_path (str or Path, optional): Path to the point cloud file. Default is None.
+		pc_semantic_path (str or Path, optional): Path to the point cloud semantic file. Default is None.
+
+		Returns:
+		SkeletonGraph: A SkeletonGraph object containing the loaded skeleton data.
+		"""
+
+		df_skeleton = pd.read_csv(str(skeleton_path), low_memory=False)
+		
+		# Optionally load point cloud and semantic information as well
+		df_pointcloud = None
+		if pc_path is not None:
+			df_pointcloud = pd.read_csv(str(pc_path))
+		if pc_semantic_path is not None:
+			df_semantics = pd.read_csv(str(pc_semantic_path))
+			if df_pointcloud is None:
+				df_pointcloud = df_semantics
+			else:
+				df_pointcloud = pd.concat([df_pointcloud, df_semantics], axis=1)
+
+		skeleton_data = df_skeleton.loc[
+			~df_skeleton["x_skeleton"].isna(), ["x_skeleton", "y_skeleton", "z_skeleton", "vid", "parentid", "edgetype"]
+		]
+
+		nodes = skeleton_data[["x_skeleton", "y_skeleton", "z_skeleton"]].values
+		edges = skeleton_data[["parentid", "vid"]].values[1:].astype(int)
+		edge_types = skeleton_data["edgetype"].values[1:].astype(str)
+
+		if "gt_int_length" in df_skeleton.columns:
+			skeleton_data = df_skeleton.loc[~df_skeleton["x_skeleton"].isna(), ["gt_int_length", "gt_int_diameter", "gt_ph_angle", "gt_lf_angle"]]
+			attributes_gt = {
+				"gt_int_length": skeleton_data["gt_int_length"].values,
+				"gt_int_diameter": skeleton_data["gt_int_diameter"].values,
+				"gt_ph_angle": skeleton_data["gt_ph_angle"].values,
+				"gt_lf_angle": skeleton_data["gt_lf_angle"].values
+			}
+		else:
+			attributes_gt = {}
+		
+		S_gt = cls()
+		S_gt.load(nodes, edges, edge_types.tolist(), df_pc=df_pointcloud, attributes=attributes_gt)
+		S_gt.name = skeleton_path.stem.replace("_skeleton", "")
+		S_gt.get_node_order()
+
+		return S_gt
 
 	def get_node_order(self):
 		# Step 4: get node order and determine is node is a parent
@@ -227,7 +283,7 @@ class SkeletonGraph():
 		# print(node_order)
 
 	def get_node_attribute(self, attribute = "pos"):
-		a=dict(self.G.nodes(data=True)).values()
+		# a=dict(self.G.nodes(data=True)).values()
 		return np.array([x[attribute] for x in dict(self.G.nodes(data=True)).values()])
 	
 	def get_edge_attribute(self, attribute = "edge_type"):
@@ -247,14 +303,14 @@ class SkeletonGraph():
 			return self.df_pc[["red", "green", "blue"]].values
 		else:
 			return None
-		
+
 	def get_semantic_pointcloud(self, semantic_name="semantic"):
 		if self.df_pc is not None:
 			return self.df_pc[semantic_name].values
 		else:
 			return None
 
-	def visualise_graph(self):
+	def visualise_graph(self, show_segmented=False, semantic_name="semantic", **kwargs):
 		all_nodes_with_attributes = dict(self.G.nodes(data=True))
 		nodes = np.array([x["pos"] for x in all_nodes_with_attributes.values()])
 
@@ -272,7 +328,18 @@ class SkeletonGraph():
 
 		attributes = self.get_attributes()
 
-		ve.vis(pc = self.get_xyz_pointcloud(), nodes=nodes, edges=edges, node_order=node_order, parents=parents, edges_type=edges_type, attributes=attributes)
+		if show_segmented:
+			xyz = self.get_xyz_pointcloud()
+			semantic = self.get_semantic_pointcloud(semantic_name)
+			bool_array = np.zeros(semantic.shape[0]).astype(np.bool)
+			# bool_array = np.bitwise_or(semantic==1 ,semantic==3) # 1=leaves, 2=main stem, 3=pole, 4=side stem
+
+			ve.vis(pc = xyz[~bool_array, :], colors=semantic[~bool_array], nodes=nodes, edges=edges, node_order=node_order, parents=parents, edges_type=edges_type, attributes=attributes, **kwargs)
+
+		else:
+			ve.vis(pc = self.get_xyz_pointcloud(),  colors=self.get_colours_pointcloud(), 
+		#   distances=self.get_semantic_pointcloud(),
+		  nodes=nodes, edges=edges, node_order=node_order, parents=parents, edges_type=edges_type, attributes=attributes, **kwargs)
 
 	def get_attributes(self):
 		# Collect all unique keys from the attribute dictionaries
@@ -352,8 +419,45 @@ class SkeletonGraph():
 		self.mapping_reverse = {i: node for i, node in enumerate(temp_copy.nodes())}
 		self.G_filtered = nx.relabel_nodes(temp_copy, mapping)
 		self.G = self.G_filtered
-		self.get_edge_type()
-		# self.get_node_order()
+
+	
+	def remove_non_unique_nodes(self):
+		"""Function to remove non unique nodes based on float16 node position"""
+		nodes = self.get_node_attribute()
+		_, indices = np.unique(nodes.astype(np.float16), axis=0, return_index=True)
+		indices.sort()
+		points_to_remove = np.setdiff1d(np.arange(nodes.shape[0]), indices).tolist()
+		self.remove_node_and_update_edge(points_to_remove, do_relabel=True)
+
+	def remove_node_and_update_edge(self, node_id:int | list, do_relabel: bool = True):
+		"""
+		Remove node_id and reconnect edges accordingly
+		"""
+
+		# for nodes in node_id:
+		if isinstance(node_id, int):
+			node_ids = [node_id]
+		else:
+			node_ids = list(node_id)
+
+		temp = self.G.copy()
+		for nid in np.unique(node_ids):
+			for in_src, _ in self.G.in_edges(nid):
+				for _, out_dst in self.G.out_edges(nid):
+					temp.add_edge(in_src, out_dst)
+					temp.edges[in_src, out_dst].update(self.G.edges[in_src, nid])
+			temp.remove_node(nid)
+			self.G = temp
+		# temp_copy = temp.copy()
+		
+
+			# mapping = {node: i for i, node in enumerate(temp_copy.nodes())}
+			# self.G = nx.relabel_nodes(temp_copy, mapping)
+		remove2 = [x for x in self.G.nodes if self.G.nodes[x]=={}]
+		[self.G.remove_node(x) for x in remove2]
+		if do_relabel:
+			self.G = relabel(self.G)
+		
 		
 	def edge_from_filtered(self):
 
@@ -412,66 +516,191 @@ class SkeletonGraph():
 
 
 
-	def get_edge_type(self, angle_between_trunk_and_lateral=60):
-		edge_types = {0: "root"}
-		root = 0
+	def get_edge_type(self, **kwargs):
+		self.G = graph_edges_to_tree(graph=self.G, **kwargs)
+		self.get_node_order()
+
 		# Traverse the MTG to calculate orders
 		# children = list(self.G.successors(root))
 		# for child in children:
 		# 	edge_types[child]="<"
 		
 		# stack = list(self.G.successors(root))
-		stack = [root]
-		while stack:
-			new_id = stack.pop()
-			# if new_id==4 or new_id==5:
-			# 	print("x")
-			pos = self.G.nodes[new_id]["pos"]
+		# stack = [root_id]
+		# while stack:
+		# 	parent_id = stack.pop()
+		# 	self.get_single_edge_type(parent_id, angle_between_trunk_and_lateral)
+		# 	stack+=list(self.G.successors(parent_id))
+		# 	new_id = stack.pop()
+		# 	pos = self.G.nodes[new_id]["pos"]
 
-			if new_id==root:
-				parent_pos = pos - np.array([0, 0, .1])
-			else:
-				parent = list(self.G.predecessors(new_id))[0]
-				parent_pos = self.G.nodes[parent]["pos"]
+		# 	if new_id==root:
+		# 		parent_pos = pos - np.array([0, 0, .1])
+		# 	else:
+		# 		parent = list(self.G.predecessors(new_id))[0]
+		# 		parent_pos = self.G.nodes[parent]["pos"]
 
-			children = list(self.G.successors(new_id))
-			if len(children)>0:
-				langles = []
-				for child in children:
-					child_pos = self.G.nodes[child]["pos"]
+		# 	children = list(self.G.successors(new_id))
+		# 	if len(children)>0:
+		# 		langles = []
+		# 		for child in children:
+		# 			child_pos = self.G.nodes[child]["pos"]
 
-					first_edge_type = '<'
-					langle = math.degrees(math.acos(
-						round(np.dot(direction(pos - parent_pos), direction(child_pos - pos)),3))) # round for bug fix
+		# 			first_edge_type = '<'
+		# 			langle = math.degrees(math.acos(
+		# 				round(np.dot(direction(pos - parent_pos), direction(child_pos - pos)),1))) # round for bug fix
 
-					if langle > angle_between_trunk_and_lateral: 
-						first_edge_type = '+'
-					else:
-						langles.append(langle)
+		# 			if langle > angle_between_trunk_and_lateral: 
+		# 				first_edge_type = '+'
+		# 			else:
+		# 				langles.append(langle)
 
-					edge_types[child] = first_edge_type
-					stack.append(child)
+		# 			edge_types[child] = first_edge_type
+		# 			stack.append(child)
 
-				# if multiple angles are smaller than 60, then largest angle is a branch
-				if len(langles)>1:
-					edge_types[children[langles.index(max(langles))]] = "+"
+		# 		# if multiple angles are smaller than 60, then largest angle is a branch
+		# 		if len(langles)>1:
+		# 			edge_types[children[langles.index(max(langles))]] = "+"
 
-		for child in self.G.nodes():
-			self.G.nodes[child]['edge_type'] = edge_types[child]
-		for parent, child in self.G.edges():
-			self.G.edges[parent, child]['edge_type'] = edge_types[child]
-		self.get_node_order()
+		# for child in self.G.nodes():
+		# 	self.G.nodes[child]['edge_type'] = edge_types[child]
+		# for parent, child in self.G.edges():
+		# 	self.G.edges[parent, child]['edge_type'] = edge_types[child]
 
 
-	def export_as_nodelist(self, path):
+	def get_single_edge_type(self, method="angle_based", node_id=0, **kwargs):
+		"""
+		Script to get type of edge by determining angle between vector parent and vector child.
+		If angle is larger than angle_between_trunk_and_lateral then edge_type is a branch.
+		Else it is a parent branch. However, multiple children have angle <angle_between_trunk_and_lateral.
+		Then 
+		"""
+		self.G = get_single_edge_type(graph=self.G, method=method, node_id=node_id, **kwargs)
+
+		# node_id_pos = self.G.nodes[node_id]["pos"]
+		# children = list(self.G.successors(node_id))
+
+		# parent_node_id = list(self.G.predecessors(node_id))
+		# if len(parent_node_id)==0: ## root, because it does not have any parents
+		# 	parent_node_id_pos = node_id_pos - np.array([0, 0, .1])
+		# else:
+		# 	parent_node_id_pos = self.G.nodes[parent_node_id[0]]["pos"]
+
+		# edge_types = {}
+		# langles = []
+		# langles_child = []
+		# for child in children:
+		# 	child_pos = self.G.nodes[child]["pos"]
+
+		# 	first_edge_type = '<'
+		# 	langle = math.degrees(math.acos(
+		# 		round(np.dot(direction(node_id_pos - parent_node_id_pos), direction(child_pos - node_id_pos)),1))) # round for bug fix
+
+		# 	if langle > angle_between_trunk_and_lateral: 
+		# 		first_edge_type = '+'
+		# 	else:
+		# 		langles.append(langle)
+		# 		langles_child.append(child)
+
+		# 	edge_types[child] = first_edge_type
+		# 	# stack.append(child)
+
+		# # if multiple angles are smaller than 60, then all other larger angles are a branch
+		# if len(langles)>1:
+		# 	index_min_langles = langles.index(min(langles))
+		# 	del langles_child[index_min_langles]
+		# 	for child in langles_child:
+		# 		edge_types[child] = "+"
+		# 	# index_min_langles = langles.index(min(langles))
+		# 	# for child in children:
+		# 	# edge_types[children[langles.index(max(langles))]] = "+"
+		
+		# for child, edge_type in edge_types.items():
+		# 	self.G.nodes[child]['edge_type'] = edge_type #edge_types[child]
+		# 	self.G.edges[node_id, child]['edge_type'] = edge_types[child]
+
+		# # for parent, child in self.G.edges():
+		# # 	self.G.edges[parent, child]['edge_type'] = edge_types[child]
+
+
+
+	def get_nodes_branch_id(self, root_idx=0, branch_id=0):
+		## get all nodes with brnach_id 
+		return [n for n in list(nx.dfs_tree(self.G, root_idx)) if self.G.nodes[n]["branch_number"]==branch_id]
+
+
+	def add_branch_number(self, root_idx = 0):
+		"""
+		Script to add a branch number to each branch
+		"""
+		nodes_to_count = set(nx.dfs_tree(self.G, root_idx))
+		branch_number = 0
+
+		nodes_main_stem = self.get_nodes_with_order_x(node_id=root_idx)
+
+		def add_number(indices, number):
+			for index in indices:
+				self.G.nodes[index]["branch_number"] = number
+				if index in nodes_to_count:
+					nodes_to_count.remove(index)
+		
+		add_number(nodes_main_stem, number=branch_number)
+		branch_number += 1
+
+		while len(nodes_to_count)>0:
+			node_id = list(nodes_to_count)[0]
+			nodes_branch = self.get_nodes_with_order_x(node_id=node_id)
+			add_number(nodes_branch, branch_number)
+			branch_number+=1
+
+
+	def export_as_nodelist(self, save_path=None, rename=False, first_row_correction=False):
 		# nx.write_gpickle(self.G, path)
 		df = pd.DataFrame(self.get_node_attribute("pos"), columns=["x", "y", "z"])
-		df_2 = pd.DataFrame(self.get_edges(), columns=["parentid", "vid"])
-		df_2["edgetype"] = self.get_edge_attribute("edge_type")
+		if rename:
+			df = df.rename(columns={"x": "x_skeleton", "y": "y_skeleton", "z": "z_skeleton"})
+		edges_array = self.get_edges()
+		edge_types_array = self.get_edge_attribute("edge_type")
+		df_2 = pd.DataFrame(edges_array, columns=["parentid", "vid"])
+		df_2["edgetype"] = edge_types_array
 		df_result = pd.concat([df, df_2], axis=1)
-		if not path.parent.exists():
-			path.parent.mkdir(parents=True)
-		df_result.to_csv(path, index=False)
+
+		if first_row_correction:
+			df_result["edgetype"] = ""
+			df_result["vid"] = 0
+			df_result["parentid"] = ""
+			df_result.loc[1:, "vid"] = edges_array[:,1]
+			df_result.loc[1:, "parentid"] = edges_array[:,0]
+			df_result.loc[1:, "edgetype"] = edge_types_array
+
+		if save_path is not None:
+			if not save_path.parent.exists():
+				save_path.parent.mkdir(parents=True)
+			df_result.to_csv(save_path, index=False)
+		return df_result
+
+	@classmethod
+	def from_mtg(cls, mtg_name):
+		from skeletonisation_methods.plantscan3d import mtgmanip
+		from skeletonisation_methods.plantscan3d import io
+
+		mtg = io.read_mtg_file(mtg_name)
+		nodes, edges, edge_type = mtgmanip.mtg2_nodes_edges_edge_types(mtg)
+		obj = SkeletonGraph()
+		obj.load(nodes, edges, edge_type)
+		return obj
+	
+	@classmethod
+	def from_nodelist(cls, node_list_name):
+		"""
+		Expect a csv with following headers: 
+		x, y, z, parentid, vid, edgetype
+		"""
+		df = pd.read_csv(node_list_name)
+		obj = SkeletonGraph()
+		obj.load(df[["x", "y", "z"]].values, df[["parentid", "vid"]].dropna().values.astype(int), df["edgetype"].dropna().values)
+		return obj
+	
 
 	def export_as_mtg(self, save_name="example.mtg"):
 		from skeletonisation_methods.plantscan3d import mtgmanip
@@ -487,10 +716,12 @@ class SkeletonGraph():
 		f.close()
 
 	
-	def load_csv(self, path):
-		df = pd.read_csv(str(path), low_memory=False)
+	def load_csv(self, csv_path: Path):
+		if not csv_path.exists():
+			raise FileNotFoundError(f"Please check file path {csv_path}")
+		df = pd.read_csv(str(csv_path), low_memory=False)
 		self.load(nodes=df[["x", "y", "z"]].dropna().values, edges=df[["parentid", "vid"]].dropna().astype(int).values, edge_types=df["edgetype"].dropna().values)
-		self.name = path.stem
+		self.name = csv_path.stem
 
 	def get_internode_length(self):
 		### calculate internode length, by returning nodes with node order =0 and only parents nodes
@@ -504,6 +735,8 @@ class SkeletonGraph():
 			if self.G_internode.nodes[node]["node_order"] == 0
 			and self.G_internode.nodes[node]["is_parent"] 
 		]
+		# if internodes==[]:
+		# 	return [], [], []
 
 		internodes_pos = np.array([self.G_internode.nodes[node]["pos"] for node in internodes])
 		internodes_dist = np.linalg.norm(internodes_pos[1:]-internodes_pos[:-1], axis=1)
@@ -516,6 +749,7 @@ class SkeletonGraph():
 		# self.visualise_graph()
 		print("yeah")
 
+
 	def add_gt_attributes(self, location, dict_attributes):
 		# location = "x_skeleton", "y_skeleton", "z_skeleton"
 		# dict_attributes = {gt_int_length, gt_int_diameter, gt_ph_angle, gt_lf_angle}
@@ -524,6 +758,7 @@ class SkeletonGraph():
 		array = np.linalg.norm(poses - location, axis=1)
 		self.G.nodes[array.argmin()].update(dict_attributes)
 		pass
+
 
 	def get_gt_attributes(self, attributes_list = ["gt_int_length", "gt_ph_angle", "gt_lf_angle"]): # "gt_int_diameter"
 		gt_values = []
@@ -536,6 +771,15 @@ class SkeletonGraph():
 				temp_attributes["node"] = node
 				gt_values.append(temp_attributes)
 		return gt_values
+
+
+	def reconnect_nodes(self, method="mst"):
+		from scripts import nodes_to_graph
+		points = self.get_xyz_pointcloud()
+		nodes, edges, edge_type = nodes_to_graph.nodes_to_graph(points=points,
+												  nodes=self.get_node_attribute(attribute="pos"),
+												  method=method)
+		self.load(nodes, edges, edge_types=edge_type, df_pc=self.df_pc, name=self.name)
 		
 
 	def get_angles(self, node_roder = 1):
@@ -560,7 +804,6 @@ class SkeletonGraph():
 					lateral_roots.append([i, [i, lateral_root[0]]])
 						
 
-		from scripts.calculate_angles import openalea_method, xy_plane_method
 		# phyto_angle, relangles, rel_angle_index = openalea_method(poses, lateral_roots)
 		# print("Phyto angle:", phyto_angle)
 		# print("Relative angles:", relangles)
@@ -571,6 +814,8 @@ class SkeletonGraph():
 		# print("Phyto angle:", phyto_angle)
 		# print("Relative angles:", relangles)
 
+		for i, lateral_root in enumerate(lateral_roots):
+			self.G.nodes[lateral_root[0]]["phyllotactic_angle_id"] = lateral_root[1][1]
 
 		## add internode length to graph
 		for i, node in enumerate(rel_angle_index):
@@ -585,20 +830,24 @@ class SkeletonGraph():
 		# ve.vis(pc = pd.read_csv(str(file_name), low_memory=False)[["x", "y", "z"]], nodes=temp_nodes, edges=temp_edges)
 		
 		## get branching angle 
-		branch_angles = []
 		for j in lateral_roots[:-1]:
-			pos_branch = poses[j[1][1]]
-			pos_parent_node = poses[j[0]]
-			pos_next_internode = poses[internodes[internodes.index(j[0])+1]]
+			current_node = j[0]
+			angle_branch_id = j[1][1]
+			nextnode_id = internodes[internodes.index(current_node)+1]
+
+			pos_branch = poses[angle_branch_id]
+			pos_parent_node = poses[current_node]
+			pos_next_internode = poses[nextnode_id]
+
 			angle = math.degrees(math.acos(
 				round(np.dot(direction(pos_branch - pos_parent_node), direction(pos_next_internode - pos_parent_node)),3)))
-			branch_angles.append([j[0], angle])	
 		
 		## add internode length to graph
-		for node, angle in branch_angles:
-			self.G.nodes[node]["lf_angle"] = angle
+		# for node, angle_branch_id, angle in branch_angles:
+			self.G.nodes[current_node]["lf_angle"] = angle
+			self.G.nodes[current_node]["leaf_angle_branch_id"] = angle_branch_id
+			self.G.nodes[current_node]["leaf_angle_nextnode_id"] = nextnode_id
 
-		print("x")
 
 
 		# lateral_roots = sum([[n for n in self.G.successors(i) if self.G.edge_type(n) == '+'] for i in internodes],[])
@@ -616,7 +865,7 @@ class SkeletonGraph():
 		
 		# return trunk_line, lateral_lines, nodelength
 
-	def gaussian_smoothing(self, var0=.25, var1=.25, indices=[0,1], node_order_filtering=True):
+	def gaussian_smoothing(self, **kwargs):
 		""""Filter the graph based on node order and parent status, and updates self.G accordingly.
 		inputs:
 			var0 (float): variance for node
@@ -626,233 +875,417 @@ class SkeletonGraph():
 		returns:
 			None
 		"""
+		from scripts.postprocessing_methods import gaussian_smoothing
+		self.G = gaussian_smoothing(self.G, **kwargs)
 
-		nprop = dict()
-		gw0 = gaussian_weight(0, var0)
-		gw1 = gaussian_weight(1, var1)
-		# self.visualise_graph()
-		for node in self.G.nodes():
-			value = self.G.nodes[node]["pos"]
-			node_order = self.G.nodes[node]["node_order"]
-			nvalues = [value * gw0]
-			parent = list(self.G.predecessors(node))
-			if parent!=[]:
-				if node_order_filtering==False:
-					nvalues.append(self.G.nodes[parent[0]]["pos"] * gw1)
-				elif self.G.nodes[parent[0]]["node_order"] == node_order:
-					nvalues.append(self.G.nodes[parent[0]]["pos"] * gw1)
-			children = list(self.G.successors(node))
-			# children = [child for child in children if self.G.nodes[child]["edge_type"] == '<']
-			if node_order_filtering:
-				children = [child for child in children if self.G.nodes[child]["node_order"] == node_order]
+		# It is possible that by apply smoothing non unique nodes are generated. 
+		# remove those if they exist
+		self.remove_non_unique_nodes()
 
-			for child in children:
-				nvalues.append(self.G.nodes[child]["pos"] * gw1)
-			nvalue = sum(nvalues[1:], nvalues[0]) / sum([gw0 + (len(nvalues) - 1) * gw1])
-			nprop[node] = nvalue
-		for node in nprop.keys():
-			self.G.nodes[node]["pos"][indices] = nprop[node][indices]	
-		# self.visualise_graph()
 
-	def main_post_processing(self, cfg):
-		if cfg.get("post_processing", None) is None:
+	def main_post_processing(self, cfg_post_processing):
+		if cfg_post_processing is None:
 			return
+		
 
-		for method in cfg["post_processing"].get("methods", []):
-			temp = cfg["post_processing"][method]
+		for method in cfg_post_processing.get("methods", []):
+			temp = cfg_post_processing[method]
 			key = list(temp.keys())[0]
 			print("Applying post processing method: ", key)
-			if temp[key] is not None:
-				getattr(self, key, lambda: "Unknown action")(**temp[key])
-			else:
-				getattr(self, key, lambda: "Unknown action")()
+			try:
+				if temp[key] is not None:
+					getattr(self, key)(**temp[key])
+				else:
+					getattr(self, key)()
+			except AttributeError:
+				print(f"Cannot find function: {key}")
 
 
 			# if method == "gaussian":
 			# 	self.gaussian_smoothing(cfg["post_processing"]["gaussian"]["var0"], cfg["post_processing"]["gaussian"]["var1"])
 
+	def get_nodes_with_order_x(self, node_id, node_order_offset: int = 0, parents_only: bool = False):
+		"""
+		Get all nodes succesors of node_id with same node_order is offset is 0
+		"""
 
-	def line_fitting_3d(self):
-		idx = 0 # 0 is root
-		successors = list(nx.dfs_tree(self.G, 0))
-		node_roder = self.G.nodes[idx]["node_order"]
+		node_order = self.G.nodes[node_id]["node_order"] + node_order_offset
+		if parents_only:
+			return [n for n in list(nx.dfs_tree(self.G, node_id)) if (self.G.nodes[n]["node_order"]==node_order and  self.G.nodes[n]["is_parent"])]
+		else:
+			return [n for n in list(nx.dfs_tree(self.G, node_id)) if self.G.nodes[n]["node_order"]==node_order]
 
 
-		new_poses = []
-		
-		lateral_root = [n for n in successors if self.G.nodes[n]["node_order"]==node_roder]
-		points = self.get_node_attribute("pos")[lateral_root]
-		method = "poly1d"
-		# main_stem_xyz = create_new_points(points, method=method)
+	def simplify(self, distance_threshold: float = 0.001, merge_th: float = np.inf, alpha_th: float = 0.9):
+		"""
+		Script to simplify Graph, based on AdTree
+		https://github.com/tudelft3d/AdTree/blob/main/AdTree/skeleton.cpp#420
+		Two methds to simplify graph:
+		if node_degrees = 2, determine distance between parent and child of current node.
+		if distance is whitin distance threshold remove node if is not a parent node.
 
-		internodes, _, _ = self.get_internode_length()
-		lateral_roots = []
-		for i in internodes:
-			node_roder = self.G.nodes[i]["node_order"]
-			list_succesors = list(self.G.successors(i))
-			branches = [n for n in list_succesors if self.G.nodes[n]["node_order"]==node_roder+1]
-			branch = branches[np.argmax([len(nx.dfs_tree(self.G, branch)) for branch in branches])]
+		if node_degrees =>2 check whether we can simplify the childs of current node. 
+		By calculating distrance from child_i to child_j and vica versa
+		merge_th# currently set to infite... but could be anything
+		alpha_th = similarity between two chid vectors
 
-			# for branch in branches:
-			# branch = branches[np.argmax([len(nx.dfs_tree(self.G, branch)) for branch in branches])]
-			successors = list(nx.dfs_tree(self.G, branch))
-			idx_side_shoot = [n for n in successors if self.G.nodes[n]["node_order"]==node_roder+1]
-			if len(idx_side_shoot)<=3:
+		"""
+
+		# distance_threshold = 0.001
+		nodes_to_remove = []
+
+		nodes = list(self.G.nodes)
+		processed_nodes = []
+		while nodes:
+			node = nodes[0]
+			nodes= nodes[1:]
+
+			processed_nodes.append(node)
+
+
+		# for node in self.G.nodes:
+			pCurrent = self.G.nodes[node]["pos"]
+			node_degree = nx.degree(self.G, node)
+			if node_degree==1 or self.G.nodes[node].get("edge_type")=="root":
+				## node is beginning or end point skip... for now
 				continue
-			query_z = self.get_node_attribute("pos")[idx_side_shoot][0, 2]
-			points_bool = np.logical_and(points[:, 2] < (query_z+ 0.10) , points[:, 2] > (query_z - 0.1))
-			main_stem_xyz = create_new_points(points[points_bool], method=method)
 
-			points2 = self.get_node_attribute("pos")[idx_side_shoot][:10]
-			new_points2 = create_new_points(points2, method)
+			elif node_degree==2: ## node with only parent and end node
+				node_parent = list(self.G.predecessors(node))[0]
+				pParent = self.G.nodes[node_parent]["pos"]
+
+				node_child = list(self.G.successors(node))[0]
+				pChild = self.G.nodes[node_child]["pos"]
+
+				temp = np.cross(pCurrent - pParent, pCurrent - pChild)
+				distance = np.linalg.norm(temp) / np.linalg.norm(pParent - pChild)
+				if distance<distance_threshold and not self.G.nodes[node]["is_parent"]:
+					self.remove_node_and_update_edge(node, do_relabel=False)
+					nodes_to_remove.append(node)
+			
+			elif node_degree>2:
+				## function to merge two childs if they are similar
+				nodes_child = list(self.G.successors(node))
+				min_value = np.inf
+
+				sourceV, targetV = None, None
+
+				for i in range(len(nodes_child)-1):
+					for j in range(i+1, len(nodes_child)):
+						id_i = nodes_child[i]
+						id_j = nodes_child[j]
+
+						pos_i = self.G.nodes[id_i]["pos"]
+						pos_j = self.G.nodes[id_j]["pos"]
+
+						merge_i2j = compute_merge_value(pCurrent, pos_i, pos_j, alpha_th)
+						merge_j2i = compute_merge_value(pCurrent, pos_j, pos_i, alpha_th)
+
+						if merge_i2j < merge_j2i and merge_i2j<min_value:
+							min_value = merge_i2j
+							sourceV = id_i
+							targetV = id_j
+						elif  merge_j2i < merge_i2j and merge_j2i<min_value:
+							min_value = merge_j2i
+							sourceV = id_i
+							targetV = id_j
+
+				if min_value<merge_th and sourceV is not None: # distance too large, you don't want to mrege
+					self.merge_vertices_and_update_edges(sourceV, targetV, relabel=False)
+					nodes.remove(sourceV)
+					nodes.remove(targetV)
+				else:
+					pass
+
+		self.G = relabel(self.G)
+
+
+	def line_fitting_3d(self, root_idx: int = 0, line_fit_method="spline"):
+		"""
+		Script to fit a line through every branch and determine interect with parent branch
+		
+		"""
+
+		self.add_branch_number()
+
+		## node positions and branches
+		positions = self.get_node_attribute()
+		branches = self.get_node_attribute("branch_number")
+
+		new_parents = []
+		new_parents.append(positions[root_idx])
+		new_edges = []
+
+		## start with root branch
+		nodes = self.get_nodes_branch_id(branch_id=0)
+		points = positions[nodes]
+
+		all_new_points, _ = create_new_points(points, method=line_fit_method)
+		all_new_points = np.empty((0, 3))
+
+		mapping = {}	
+		edge_mapping = []
+		points_to_remove = []
+		## get all parents
+		parents_list = self.get_nodes_with_order_x(root_idx, parents_only=True)
+		while len(parents_list)>0:
+			## get first parent_id
+			new_parent_id = len(new_parents) -1
+			parent_id = parents_list[0]
+			parents_list = parents_list[1:]
+
+			# get all nodes of branch parent_id
+			nodes_parent_branch = self.get_nodes_branch_id(branch_id=self.G.nodes[parent_id]["branch_number"])
+			parent_points, _ = create_new_points(positions[nodes_parent_branch], method=line_fit_method)
+
+			## for current parent id get child with nodeis+1
+			nodes_with_id1= [n for n in self.G.successors(parent_id) if self.G.nodes[n]["node_order"]>self.G.nodes[parent_id]["node_order"]] #self.get_nodes_with_order_x(parent_id, node_order_offset=1)
+
+			## fit a line through every unique branch connted to parent_id (mostly=1)
+			unique_branches = np.unique(branches[nodes_with_id1])
+			for unique_number in unique_branches:
+				## get all nodes and parent nodes
+				temp_nodes = self.get_nodes_branch_id(branch_id=unique_number)
+				temp_nodes_parents = [x for x in temp_nodes if self.G.nodes[x]["is_parent"]]
+				
+				## add "end_points"
+				last_node = self.get_nodes_with_order_x(temp_nodes[0])[-1]
+				if not self.G.nodes[last_node]["is_parent"]:
+					mapping[last_node] = positions[last_node]
+					# if there are parent nodes in temp_nodes connect last node to that
+					if len(temp_nodes_parents)>0:
+						edge_mapping.append([temp_nodes_parents[-1], last_node])
+					else: ## connect to parent_id
+						edge_mapping.append([parent_id, last_node])
+
+				## fit a line through all_nodes of current_branch
+				fitered, extra_polated_child_points = create_new_points(positions[temp_nodes], method=line_fit_method)
+				## if not exrapolated
+				if extra_polated_child_points is None:
+					parents_list2 = self.get_nodes_with_order_x(temp_nodes[0], parents_only=True)
+					parents_list += parents_list2
+			
+					# update parent position
+					if parent_id not in mapping:
+						mapping[parent_id] = positions[parent_id]
+					else: 
+						old_pos = mapping[parent_id]
+						mapping[parent_id] = (old_pos + positions[parent_id])/2
+
+					## update edges
+					if len(temp_nodes_parents)>0:
+						edge_mapping.append([parent_id, temp_nodes_parents[0]])
+					else:
+						edge_mapping.append([parent_id, last_node])
+
+					continue
+					# new_edges.append((new_parent_id, len(new_parents)))
+					# new_parents.append(positions[parent_id])
+
+					# continue
+				else: 
+					# if extra polated we are interested in intersection child nodes and parent nodes.
+					# parent node pose is updated on intersection
+					extra_polated_child_points= extra_polated_child_points[::-1]
+					new_pose, idx, child_idx = find_closest_points(parent_points, extra_polated_child_points)
+
+					all_new_points = np.vstack([all_new_points, extra_polated_child_points[:child_idx]])
+
+					# update parent position
+					if parent_id not in mapping:
+						mapping[parent_id] = new_pose
+					else:
+						old_pos = mapping[parent_id]
+						mapping[parent_id] = (old_pos + new_pose)/2
+
+					## check whether the intercepted pose is not to close to any other nodes in parent branch
+					remove_close_points = True
+					remove_close_th = 0.01 # remove points within 1 cm
+					if remove_close_points:
+						nodes_parent_branch_array = np.array(nodes_parent_branch)
+						nodes_parent_branch_array = nodes_parent_branch_array[nodes_parent_branch_array!=parent_id]
+						dist = np.linalg.norm(positions[nodes_parent_branch_array.tolist()] - mapping[parent_id], axis=1)
+						points_to_remove += nodes_parent_branch_array[dist<remove_close_th].tolist()
+
+
+					## update edges
+					if len(temp_nodes_parents)>0:
+						edge_mapping.append([parent_id, temp_nodes_parents[0]])
+					else:
+						edge_mapping.append([parent_id, last_node])
+
+					new_edges.append((new_parent_id, len(new_parents)))
+					new_parents.append(new_pose)
+
+					## additional step to add end points for every branch, add end point if it is not a parent
+					# last_node = self.get_nodes_with_order_x(temp_nodes[0])[-1]
+					# if not self.G.nodes[last_node]["is_parent"]:
+					# 	new_parents.append(positions[last_node])
+					# 	new_edges.append((len(new_parents)-1, len(new_parents)))
+
+					# parents_list+= self.get_nodes_with_order_x(temp_nodes[0], parents_only=True)
+					parents_list2 = self.get_nodes_with_order_x(temp_nodes[0], parents_only=True)
+					parents_list += parents_list2
+			
+		# update al node positions
+		nodes = []
+		key_mapping = {}
+		for i, (key, pos) in enumerate(mapping.items()):
+			key_mapping[key] = i
+			nodes.append(pos)
+			self.G.nodes[key]["pos"] = pos
 	
-			# Extract x, y, z coordinates
-			new_pose, idx = find_closest_points(main_stem_xyz, new_points2)
-			# ve.vis(self.get_xyz_pointcloud(), nodes=np.vstack([main_stem_xyz, new_points2]), root_idx=idx)
+		## add extrapolated points:
+		# for i, pos in enumerate(all_new_points):
+		# 	self.G.add_node(len(self.G.nodes), **{"pos": pos, "edge_type": None})
 
-			new_poses.append([i, new_pose])
-		for idx, new_pose in new_poses:
-			self.G.nodes[idx]["pos"] = new_pose	
-		self.G_original = self.G.copy()
-		# self.visualise_graph()
+		edge_list = []
+		for edge in edge_mapping:
+			edge_list.append([key_mapping[edge[0]], key_mapping[edge[1]]])
 
-
-
-
-
-def find_closest_points(parent_points, child_points):
-	# Find the closest points in the source to the target points
-	from scipy.spatial import cKDTree
-	tree = cKDTree(parent_points)
-	distance = np.inf
-	idx = 0
-	for child in child_points:
-		temp_distance, temp_idx = tree.query(child)
-		if tree.query(child)[0]<distance:
-			distance = temp_distance
-			idx = temp_idx
-	new_pose = parent_points[idx]
-
-	return new_pose, idx
+		points_to_remove = [x for x in points_to_remove if not (self.G.nodes[x]["is_parent"] or self.G.nodes[x]["edge_type"]=="root")]
+		self.remove_node_and_update_edge(points_to_remove, do_relabel=True)
+		# It is possible that after line fitting non unique nodes are generated. 
+		# remove those if they exist
+		self.remove_non_unique_nodes()
 
 
 
-def create_new_points(points, method = "spline", **kwargs):
-	if len(points)<3:
-		return points
-	elif method == "spline":
-		from scipy.interpolate import splprep, splev
-		x, y, z = points[:, 0], points[:, 1], points[:, 2]
+	def merge_vertices_and_update_edges(self, id_source, id_target, 
+			weight_source: float = 0.5,
+			weight_target: float = 0.5,
+			relabel: bool = True):
+		"""
+		Merge two vertices in the graph, update their edges, and optionally relabel the graph.
+			Parameters:
+				id_source (int): ID of the first vertex to merge.
+				id_target (int): ID of the second vertex to merge.
+				weight_source (float, optional): Weight for the position of the source vertex. Default is 0.5.
+				weight_target (float, optional): Weight for the position of the target vertex. Default is 0.5.
+				relabel (bool, optional): Whether to relabel the graph after merging. Default is True.
+			Returns:
+				None		
+		"""
+		parent_source = list(self.G.predecessors(id_source))[0]
+		parent_target = list(self.G.predecessors(id_target))[0]
 
-		# Use splprep to fit a parametric spline
-		tck, u = splprep([x, y, z], s=0)  # `s=0` means no smoothing, use `s>0` for smoothing
+		if parent_source!=parent_target:
+			print("Cannot vertices with different parent")
+			return
 
-		# Generate new parameter values for extrapolation
-		u_new = np.linspace(-0.01, 1.01, 100)  # Extrapolate beyond [0, 1] range of u
+		new_node_id = max(list(self.G.nodes))+1
+		new_edges = []
+		new_edges.append([parent_source, new_node_id])
 
-		# Evaluate the spline at new parameter values
-		x_new, y_new, z_new = splev(u_new, tck)
-		xyz_new = np.column_stack([x_new, y_new, z_new])
-	elif method=="poly1d":
-		xyz_new = create_points_poly(points)
-	return xyz_new
+		## remove old edges and add childs to new_edge_list
+		childs_source = list(self.G.successors(id_source))
+		for child_source in childs_source:
+			new_edges.append([new_node_id, child_source])
+			self.G.remove_edge(id_source, child_source)
 
-def create_points_poly(points):
-	# Extract x, y, z coordinates
-	x, y, z = points[:, 0], points[:, 1], points[:, 2]
+		childs_target = list(self.G.successors(id_target))
+		for child_target in childs_target:
+			new_edges.append([new_node_id, child_target])
+			self.G.remove_edge(id_target, child_target)
+		# remove parent edge
+		self.G.remove_edge(parent_source, id_source)
+		self.G.remove_edge(parent_target, id_target)
 
-	# Define parameter t (e.g., cumulative arc length or just indices)
-	t = np.arange(len(points))
-	# t  = np.linspace(-0.1, 1.1, 100)  # Extrapolate beyond [0, 1] range of u
+		# calculate new position
+		new_node_pos = self.G.nodes[id_source]["pos"]*weight_source + self.G.nodes[id_target]["pos"]*weight_target / (weight_source  + weight_target)
 
-	# Fit polynomials for x(t), y(t), z(t)
-	degree = 1  # Degree of polynomial
-	px = np.polyfit(t, x, degree)
-	py = np.polyfit(t, y, degree)
-	pz = np.polyfit(t, z, degree)
+		# remove old nodes and add new
+		self.G.remove_node(id_source)
+		self.G.remove_node(id_target)
+		self.G.add_node(new_node_id, **{"pos": new_node_pos, "edge_type": None})
 
-	# Create polynomial functions
-	fx = np.poly1d(px)
-	fy = np.poly1d(py)
-	fz = np.poly1d(pz)
+		# update new edges 
+		for parent, child in new_edges:
+			self.G.add_edge(parent, child)
+		for unique_parent in np.unique(np.array(new_edges)[:,0]):
+			self.get_single_edge_type(node_id=unique_parent)
 
-	t_new = np.linspace(t[0]-int(0.5*len(points)), t[-1] + int(0.1*len(points)), 100)  # Extrapolate beyond original range
-
-	# Predict new points
-	x_new = fx(t_new)
-	y_new = fy(t_new)
-	z_new = fz(t_new)
-	xyz_new = np.column_stack([x_new, y_new, z_new])
-	return xyz_new
-					
-
-def gaussian_weight(x, var):
-	from math import exp, sqrt, pi
-	return exp(-x ** 2 / (2 * var)) / sqrt(2 * pi * var) # corrected from opeanalea
+		if relabel:
+			self.G = relabel(self.G)
 
 
-# def gaussian_filter(mtg, propname, considerapicalonly=True):
-# 	prop = mtg.property(propname)
-# 	nprop = dict()
-# 	gw0 = gaussian_weight(0, 1)
-# 	gw1 = gaussian_weight(1, 1)
-# 	for vid, value in list(prop.items()):
-# 		nvalues = [value * gw0]
-# 		parent = mtg.parent(vid)
-# 		if parent and parent in prop:
-# 			nvalues.append(prop[parent] * gw1)
-# 		children = mtg.children(vid)
-# 		if considerapicalonly: children = [child for child in children if mtg.edge_type(child) == '<']
-# 		for child in children:
-# 			if child in prop:
-# 				nvalues.append(prop[child] * gw1)
+def compute_merge_value(current_pos, i_pos, j_pos, alpha_th: float = 0.9):
+	"""
+	Function taht determines whether the posisition i_pos and j_pos should be merged.
+	Based on the angle between i and j if exceeds alpha_threshold, and length
+	of both sectors is roughly similar. 
+	Returns distance from i_pos to vector_j using sin
+	"""
 
-# 		nvalue = sum(nvalues[1:], nvalues[0]) / sum([gw0 + (len(nvalues) - 1) * gw1])
-# 		nprop[vid] = nvalue
+	d_value = np.inf
 
-# 	prop.update(nprop)
+	vector_i = i_pos - current_pos
+	vector_j = j_pos - current_pos
+
+	length_i = np.linalg.norm(vector_i)
+	length_j = np.linalg.norm(vector_j)
+
+	dir_i  = vector_i / length_i
+	dir_j = vector_j / length_j
+
+	alpha = np.dot(dir_i, dir_j)
+
+	radius_target = 1
+
+	if alpha>alpha_th:
+		ratio = length_i / length_j
+		if ratio>= 0.5 and ratio<=2:
+			return length_i*math.sin(math.acos(alpha)) / radius_target
+		## length is not similar so do not merge
+		return d_value
+
+	else:
+		return d_value
+
+
+def relabel(graph):
+	"""
+	Script to relabel graph for visualisation with polyscope.
+	"""
+	mapping = {node: i for i, node in enumerate(graph.nodes())}
+	return nx.relabel_nodes(graph, mapping)
 
 
 if __name__=="__main__":
 	
 	from scripts import config
-	cfg = config.Config("config.yaml")
+	cfg = config.init_config("PAPER/config.yaml")
 	
-	dt_graph_dir = Path("Resources/output_skeleton") / cfg.skeleton_method
+	node_list_name = "Resources/output_skeleton_paper3/0-paper-2Dto3D/voxel/Harvest_01_PotNr_80.csv"
+	node_list_name = "/home/agro/w-drive-vision/GARdata/datasets/tomato_plant_segmentation/TomatoWUR_4dataTU/EXPERIMENTS_PAPER3/0-paper-2Dto3D/xu/Harvest_01_PotNr_80.csv"
+	save_folder= "/home/agro/w-drive-vision/GARdata/datasets/tomato_plant_segmentation/TomatoWUR_4dataTU/EXPERIMENTS_PAPER3/figures_M&M/Harvest_01_PotNr_55.csv"
 
-	plant_nr = "Harvest_01_PotNr_95"
-	file_name = cfg.data.pointcloud_dir / (plant_nr + ".csv")
-
-	data = pd.read_csv(str(file_name), low_memory=False)
-	# 	# if load_skeleton_data:
-	# skeleton_data = data.loc[
-	# 	~data["x_skeleton"].isna(), ["x_skeleton", "y_skeleton", "z_skeleton", "vid", "parentid", "edgetype"]
-	# ]
-	# nodes = skeleton_data[["x_skeleton", "y_skeleton", "z_skeleton"]].values
-	# edges = skeleton_data[["parentid", "vid"]].values[1:].astype(int)
-	# edge_types = skeleton_data["edgetype"].values[1:].astype(str)
-
-	# obj = SkeletonGraph(file_name)
-	# obj.load(nodes, edges, edge_types)
-	# obj.get_node_order()
-	# obj.get_angles()
-
-	S_pred = SkeletonGraph()
-	S_pred.load_csv(dt_graph_dir / (file_name.stem + ".csv"))
-	S_pred.df = data[['x', 'y', 'z']]
-	S_pred.get_node_order()
-	S_pred.export_as_mtg()
-	# S_pred.visualise_graph()
-	S_pred.filter(np.inf, True)
-	S_pred.edge_from_filtered()
-	# S_pred.get_edge_type(70)
-	# S_pred.visualise_graph()
-	S_pred.line_fitting_3d()
-
-	# S_pred.main_post_processing(cfg=config)
-
-
+	obj = SkeletonGraph.from_nodelist(node_list_name)
+	obj.visualise_graph(save_name="no_post_processing.png")
+	# obj.get_edge_type()
+	obj.get_node_order()
+	# obj.gaussian_smoothing(var0=.25, var1=.25, indices=[0,1], node_order_filtering=True, num_children=2)
+	obj.get_edge_type()
 	# obj.visualise_graph()
-	# # obj.filter(2, True)
-	# obj.G = obj.G_filtered
-	# obj.visualise_graph()
+	# exit()
+	nodes = obj.get_node_attribute()
+	_, indices = np.unique(nodes.astype(np.float16), axis=0, return_index=True)
+	indices.sort()
+	obj.line_fitting_3d()
+	obj.get_edge_type()
+	obj.visualise_graph()
+
+
+
+
+	obj.simplify()
+	# obj.gaussian_smoothing(var0=.25, var1=1, indices=[0,1], node_order_filtering=False, num_children=3)
+
+
+	# obj.line_fitting_3d()
+	obj.get_edge_type()
+	# obj.filter(np.inf, True)
+	obj.visualise_graph(save_name="post_processing.png")
+
+
+

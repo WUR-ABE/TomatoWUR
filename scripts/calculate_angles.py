@@ -20,14 +20,16 @@ def xy_plane_method(poses: np.ndarray, lateral_roots: list):
     Calculate angles and relative angles for given poses and lateral roots.
     This method computes the angles of lateral roots in the xy-plane and their relative angles.
     Parameters:
-    poses (numpy.ndarray): An array of positions.
-    lateral_roots (list): A list of list, where each tuple contains indices of lateral roots.
+        poses (numpy.ndarray): An array of positions.
+        lateral_roots (list): A list of list, where each tuple contains indices of lateral roots.
     Returns:
     tuple: A tuple containing:
         - phyto_angle (list): A list of angles of the lateral roots in the xy-plane.
         - relangles (list): A list of relative angles between consecutive lateral roots.
         - rel_angle_index (list): A list of indices corresponding to the relative angles.
     """
+    if lateral_roots==[]:
+        return [], [], [], [],[]
     ref_vector = np.array([1,0]) # represents x-axis
     branch_points =  np.array([poses[lr[1][1]] for lr in lateral_roots])
     parent_points = np.array([poses[lr[1][0]] for lr in lateral_roots])
@@ -39,7 +41,7 @@ def xy_plane_method(poses: np.ndarray, lateral_roots: list):
     dot_product = np.clip(np.dot(lateral_lines[:,:2], ref_vector), -1.0, 1.0) #[:,:2] # only because we only focus on xy component
 
     ## TODO ASK GERT
-    lateral_lines_2d = np.divide(lines[:,:2].T, np.linalg.norm(lines[:,:2],axis=1)).T
+    lateral_lines_2d = np.divide(lines[:,:2].T, np.linalg.norm(lines[:,:2],axis=1)+ 1e-16).T
     dot_product = np.clip(np.dot(lateral_lines_2d, ref_vector), -1.0, 1.0)
 
     ## for debugging visualise lines:

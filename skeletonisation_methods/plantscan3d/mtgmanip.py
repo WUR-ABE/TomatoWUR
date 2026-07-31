@@ -123,12 +123,14 @@ def nodelist2mtg(nodes, edges, edge_types=None, radius=None):
     ii = mtg.add_component(mtg.root, label=str(counter), XX=nodes[0][0], YY=nodes[0][1], ZZ=nodes[0][2], position=nodes[0])
     # ii = mtg.add_child(0, child=1, label=str(counter)
     counter+=1
-    if edges.min() == 0:
+    shift = 1 if edges.min() == 0 else 0
+    if shift:
         edges = edges+[1,1]
-    for x, (node, edge) in enumerate(zip(nodes[1:], edges)):
+    for x, edge in enumerate(edges):
         parent = edge[0]
         child = edge[1]
-        XX, YY, ZZ = node
+        node_pos = nodes[child - shift]
+        XX, YY, ZZ = node_pos
         if edge_types is not None:
             edge_type = str(edge_types[x])
         else:
@@ -136,9 +138,9 @@ def nodelist2mtg(nodes, edges, edge_types=None, radius=None):
         # edge_type = '<'
         
         if radius:
-            ii = mtg.add_child(parent, child=child, label=str(counter), edge_type=edge_type, XX=XX, YY=YY, ZZ=ZZ, position=node, radius=radius[x])
+            ii = mtg.add_child(parent, child=child, label=str(counter), edge_type=edge_type, XX=XX, YY=YY, ZZ=ZZ, position=node_pos, radius=radius[x])
         else:
-            ii = mtg.add_child(parent, child=child, label=str(counter), edge_type=edge_type, XX=XX, YY=YY, ZZ=ZZ, position=node)
+            ii = mtg.add_child(parent, child=child, label=str(counter), edge_type=edge_type, XX=XX, YY=YY, ZZ=ZZ, position=node_pos)
         counter+=1
 
     return mtg
@@ -186,7 +188,15 @@ def filter_mtg(mtg):
 
 def mtg2_nodes_edges_edge_types(mtg):
     nodes = np.array(list(mtg.property("position").values()))
+    if nodes.size==0:
+        x=np.array(list(mtg.property("XX").values()))
+        y=np.array(list(mtg.property("YY").values()))
+        z=np.array(list(mtg.property("ZZ").values()))
+        nodes = np.array([x,y,z]).T
+
     edges = np.array(mtg.edges()[1:])
+    edges = edges - edges.min()
+
     # edges = edges - edges.min()
     edge_types = np.array(list(mtg.property("edge_type").values()))
     return nodes, edges, edge_types

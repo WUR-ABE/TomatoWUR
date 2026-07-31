@@ -13,15 +13,17 @@ from scipy.spatial import distance_matrix
 from scipy.optimize import linear_sum_assignment
 import pandas as pd
 import json
+import sys
+sys.path.append("")
 from scripts.utils_skeletonisation import load_json
-from scripts.utils_data import create_skeleton_gt_data
+# from scripts.utils_data import create_skeleton_gt_data
 from scripts.skeleton_graph import SkeletonGraph
 import scripts.visualize_examples as ve
 from scripts.calculate_metrics import Metrics
 
 ## TODO fix assignmetn problem
 
-class skeleton_matching_bart():
+class skeleton_matching():
 	""" Match predicted nodes to ground truth nodes based on euclidean distance.
 	
 	"""
@@ -47,19 +49,19 @@ class skeleton_matching_bart():
 			print("Method not implemented")
 
 
-	def match_hmm(self):
-		from plant_registration_4d import skeleton_matching as skm
-		from plant_registration_4d import skeleton as skel
+	# def match_hmm(self):
+	# 	from plant_registration_4d import skeleton_matching as skm
+	# 	from plant_registration_4d import skeleton as skel
 
-		S1 = skel.Skeleton(XYZ=self.S_gt.get_node_attribute("pos")*100, edges=self.S_gt.get_edges())
-		S2 = skel.Skeleton(XYZ=self.S_pred.get_node_attribute("pos")*100, edges=self.S_pred.get_edges())
+	# 	S1 = skel.Skeleton(XYZ=self.S_gt.get_node_attribute("pos")*100, edges=self.S_gt.get_edges())
+	# 	S2 = skel.Skeleton(XYZ=self.S_pred.get_node_attribute("pos")*100, edges=self.S_pred.get_edges())
 
-		params = {'weight_e': 0.01, 'match_ends_to_ends': False,  'use_labels' : False, 'label_penalty' : 1, 'debug': True}
-		corres = skm.skeleton_matching(S1, S2, params)
+	# 	params = {'weight_e': 0.01, 'match_ends_to_ends': False,  'use_labels' : False, 'label_penalty' : 1, 'debug': True}
+	# 	corres = skm.skeleton_matching(S1, S2, params)
 
-		self.matched_indices = corres
+	# 	self.matched_indices = corres
 
-		return corres
+	# 	return corres
 
 	def match_roel(self):
 		gt_nodes = self.S_gt.get_node_attribute("pos")
@@ -121,192 +123,6 @@ class skeleton_matching_bart():
 		print("wip")
 
 
-class GraphPairs:
-	def __init__(self, gt_graphs, dt_graphs) -> None:
-		# pairs : list[tuple[Graph, Graph]]
-		self.pairs = []
-		for gt_graph in gt_graphs:
-			matching_dt_graph = None
-			for dt_graph in dt_graphs:
-				if gt_graph.name==dt_graph.name:
-					matching_dt_graph = dt_graph
-			if matching_dt_graph is not None:
-				self.pairs.append((gt_graph, matching_dt_graph))
-			else:
-				print(f"No predictions found for {gt_graph.name}, skipping...")
-		return
-
-	def plot_pair(self, index):
-		self.pairs[index][0].plot(other=graph_pairs.pairs[index][1])
-		return
-
-
-@dataclass
-class Graph:
-	filename: str
-	nodes: np.array  # shape (N, 3)
-	edges: np.array  # shape (M, 2)
-	pcd : np.array | None = None # shape (X, 2), where usually X >> N, like 40.000 or something
-
-	def plot(
-		self,
-		other: Graph | None,
-		own_name="ground_truth",
-		other_name="prediction",
-		match_threshold_meters=0.02,
-	):
-		ps.init()
-		ps.set_up_dir("z_up")
-		ps.remove_all_structures()
-		# Set the colors for each point cloud
-		color1 = [0, 1, 0]  # Green
-		color2 = [1, 0, 0]  # Red
-		color3 = [0, 1, 1]  # Yellow
-
-		gt_nodes = self.nodes
-		dt_nodes = other.nodes
-
-		if self.pcd is not None:
-			ps.register_point_cloud("Source Point Cloud", self.pcd, radius=0.001, color=color3)
-		ps.register_point_cloud(own_name, self.nodes, radius=0.01, color=color1)
-		ps.register_curve_network(
-			"Ground truth edges", self.nodes, self.edges, radius=0.005, color=color1
-		)
-		if other is not None:
-			ps.register_point_cloud(other_name, other.nodes, radius=0.01, color=color2)
-			ps.register_curve_network(
-				"Predicted edges", other.nodes, other.edges, radius=0.005, color=color2
-			)
-		ps.show()
-
-	def plot_with_metrics(
-			self,
-			dt_graph : Graph,
-			match_threshold_meters=0.02,
-	):
-		raise NotImplementedError # TODO plot the TP, FP and FN points/edges
-
-	def plot_matches(
-		self,
-		other: Graph,
-		own_name="ground_truth",
-		other_name="prediction",
-		match_threshold_meters=0.02,
-	):
-		gt_nodes = self.nodes
-		dt_nodes = other.nodes
-
-		cost_matrix = distance_matrix(gt_nodes, dt_nodes, p=2)  # p=2 for euclidean dist
-		row_ind, col_ind = linear_sum_assignment(cost_matrix)
-
-		matched_indices = cost_matrix[row_ind, col_ind] <= match_threshold_meters
-
-		matching_edges = np.array([[i, j] for (i, j) in zip(row_ind, col_ind)])
-
-
-		ps.init()
-		ps.set_up_dir("z_up")
-		ps.remove_all_structures()
-
-		# Set the colors for each point cloud
-		color1 = [0, 1, 0]  # Green
-		color2 = [1, 0, 0]  # Red
-		color3 = [0, 0, 1]  # Blue
-
-		ps.register_point_cloud(own_name, self.nodes, radius=0.01, color=color1)
-		ps.register_point_cloud(other_name, other.nodes, radius=0.01, color=color2)
-		for matching_edge in matching_edges:
-			match_nodes = np.array(
-				[gt_nodes[matching_edge[0]], dt_nodes[matching_edge[1]]]
-			)
-
-			if matching_edge[0] == 6 and matching_edge[1] == 4:
-				print("interesting")
-			ps.register_curve_network(
-				f"match{matching_edge[0]},{matching_edge[1]}",
-				match_nodes,
-				np.array([[0, 1]]),
-				radius=0.005,
-				color=color3,
-			)
-		ps.show()
-		return
-	
-	def save(self, path):
-		for name, attribute in self.__dict__.items():
-			name = ".".join((name, "pkl"))
-			with open("/".join((path, name)), "wb") as f:
-				pickle.dump(attribute, f)
-
-	@classmethod
-	def load(cls, path):
-		my_model = {}
-		for name in cls.__annotations__:
-			file_name = ".".join((name, "pkl"))
-			with open("/".join((path, file_name)), "rb") as f:
-				my_model[name] = pickle.load(f)
-		return cls(**my_model)
-
-
-def load_dt_graphs(dt_graph_dir: Path, pickeled_predictions=False, split="test"):
-	assert dt_graph_dir.is_dir()
-	dt_graphs = []
-
-	# if pickeled_predictions:
-	# 	dt_graph_paths = natsorted(dt_graph_dir.glob("*.pkl"))
-	# 	with open(f"3DTomatoDataset/20240607_summerschool_csv/{split}.json") as f:
-	# 		filenames = json.load(f)
-	# 	split_stems = [Path(f["sem_seg_file_name"]).stem for f in filenames]
-	# 	dt_graph_paths = [ f for f in dt_graph_paths if f.stem in split_stems]
-	# 	for dt_graph_path in dt_graph_paths:
-	# 		with open(dt_graph_path, "rb") as f:
-	# 			dt_graph = pickle.load(f)
-	# 		dt_graphs.append(dt_graph)
-	# else:
-	dt_graphs = []
-	dt_graph_paths = natsorted(dt_graph_dir.glob("*.csv"))
-
-	annot_folder = Path(r"W:\PROJECTS\VisionRoboticsData\GARdata\datasets\tomato_plant_segmentation\20240607_summerschool_csv")
-	with open(annot_folder / (f"{split}.json"), "r") as f:
-		filenames = json.load(f)
-	split_stems = [Path(f["sem_seg_file_name"]).stem for f in filenames]
-	dt_graph_paths = [ f for f in dt_graph_paths if f.stem in split_stems]
-
-	for dt_graph_path in dt_graph_paths:
-		S_pred = SkeletonGraph()
-		S_pred.load_csv(dt_graph_path)
-		dt_graphs.append(S_pred)
-	# else:
-	# 	annot_folder = Path(r"W:\PROJECTS\VisionRoboticsData\GARdata\datasets\tomato_plant_segmentation\20240607_summerschool_csv")
-	# 	with open(annot_folder / (f"{split}.json"), "r") as f:
-	# 		filenames = json.load(f)
-	# 	split_stems = [Path(f["sem_seg_file_name"]).stem for f in filenames]
-	# 	dt_graph_paths = [ f for f in dt_graph_paths if f.stem in split_stems]
-		
-	# 	for dt_graph_path in dt_graph_paths:
-	# 		df = pd.read_csv(dt_graph_path)
-	# 		df = df.loc[df["class_pred"] == 4, ["x", "y", "z"]]
-	# 		S_pred = convert_segmentation2skeleton(df, "dbscan")
-	# 		dt_graph = Graph(
-	# 			filename=dt_graph_path.stem, nodes=S_pred.XYZ, edges=np.array(S_pred.edges)
-	# 		)
-
-			# ve.vis(pc= df[["x", "y", "z"]], nodes=np.array(S_pred.XYZ), edges=np.array(S_pred.edges))
-
-			# S_pred = SkeletonGraph(S_pred.XYZ, np.array(S_pred.edges), edge_types=None)
-			# S_pred.name = dt_graph_path.stem
-			# S_pred.get_edge_type()
-			# S_pred.get_node_order()
-			# S_pred.filter(2, True)
-			# dt_graphs.append(S_pred)
-		# Classnames:
-		# 0 is leaf
-		# 1 is main stem
-		# 2 is pole
-		# 3 is side stem
-		# 4 is nodes
-	return dt_graphs
-
 
 
 class Evaluation():
@@ -314,21 +130,32 @@ class Evaluation():
 	def __init__(self, gt_path_dir=None, 
 			  dt_graph_dir=None, 
 			  gt_json=None,
-
-			  cfg={"json_name": "test"}):
+			  evaluate_gt: bool=False,
+			  filter=None,
+			  filter_node_order = np.inf,
+			  node_order_eval_list: list=[0,1,2,3],
+			  parents_only: bool=True,
+			  false_threshold: float=0.02,
+			  vis: bool=False,
+			  exp_name: str = "",
+			  cfg={"json_name": "test"},
+			  post_processing: dict | None = None):
 		
 		self.gt_path_dir = gt_path_dir
 		self.dt_path_dir = dt_graph_dir
 		self.save_folder = self.dt_path_dir
 		self.cfg = cfg
+		self.cfg_post_processing = post_processing
 		self.gt_json = gt_json
 
-
-		self.filter = True
-		self.filter_node_order = np.inf
-		self.node_order_eval_list = [0,1,2,3] #which nodes to evaluate, if -1 then all
-		self.parents_only = True
-		self.false_threshold = 0.02 # meters
+		self.evaluate_gt = evaluate_gt
+		# self.filter = filter
+		self.filter_node_order = filter_node_order
+		self.node_order_eval_list = node_order_eval_list #which nodes to evaluate, if -1 then all
+		self.parents_only = parents_only
+		self.false_threshold = false_threshold # meters
+		self.vis = vis
+		self.exp_name = exp_name
 
 	def calculate_chamfer_distance(self, gt_nodes, dt_nodes):
 		"""Calculate the chamfer distance between two sets of nodes.
@@ -363,7 +190,7 @@ class Evaluation():
 		return cd
 
 
-	def evaluate_pairs(self, graph_pairs=None, vis=False, evaluate_gt=False):
+	def evaluate_pairs(self, graph_pairs=None, vis=False):
 		# if graph_pairs is None:
 		# 	gt_graphs = self.load_all_gt_data()
 		# 	dt_graphs = load_dt_graphs(self.dt_path_dir, pickeled_predictions=False, split=self.split)
@@ -389,11 +216,17 @@ class Evaluation():
 		# 					 "TP_edges", "FP_edges", "FN_edges", "Precision_edges", "Recall_edges"])
 		df = pd.DataFrame()
 
-		for gt_name in self.load_all_gt_filenames():
+		for gt_name, pc_name, semantic_name in self.load_all_gt_filenames():
 
-			S_gt = self.load_gt_data(gt_name)
-			if evaluate_gt:
+			S_gt = self.load_gt_data(gt_name, pc_name, semantic_name)
+			# if pc_name.stem=="Harvest_01_PotNr_95":
+			# 	print("DEBUGGING")
+			# else:
+			# 	continue
+			
+			if self.evaluate_gt:
 				S_pred = copy.deepcopy(S_gt)
+				self.pred_name = Path(gt_name).name
 			else:
 				S_pred = self.load_pred_data(S_gt.name)
 
@@ -409,7 +242,7 @@ class Evaluation():
 
 		################ node metrics
 		# Create a dictionary of metrics for all nodes
-		metrics = ["TP", "FP", "FN", "Precision", "Recall", "CD"]
+		metrics = ["TP", "FP", "FN", "Precision", "Recall", "F-score", "CD"]
 		df_nodes = pd.DataFrame(metrics, columns=["metric"])
 
 		# Create a list of node order evaluation strings
@@ -427,12 +260,14 @@ class Evaluation():
 			
 			precision = tp / (tp + fp) if (tp + fp) > 0 else 0
 			recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+
+			f_score = 2*precision*recall / (precision + recall)
 			
 			# Calculate Chamfer Distance (CD)
 			cd = df["CD"].mean() if str_node_order == "" else ""
 			
 			# Append the calculated metrics to the new DataFrame
-			df_nodes["node_order" + str_node_order] = [tp, fp, fn, precision, recall, cd]
+			df_nodes["node_order" + str_node_order] = [tp, fp, fn, precision, recall, f_score, cd]
 
 		# Reset the index of the new DataFrame
 		df_nodes.reset_index(drop=True, inplace=True)
@@ -449,13 +284,16 @@ class Evaluation():
 		precision_edges = df_temp["TP_edges"] / (df_temp["TP_edges"] + df_temp["FP_edges"]) if (df_temp["TP_edges"] + df_temp["FP_edges"]) > 0 else 0
 		recall_edges = df_temp["TP_edges"] / (df_temp["TP_edges"] + df_temp["FN_edges"]) if (df_temp["TP_edges"] + df_temp["FN_edges"]) > 0 else 0
 
+		f_score_edges = 2*precision_edges*recall_edges / (precision_edges+recall_edges)
+
 		# Create a dictionary with the metrics
 		metrics_dict = {
 			"TP_edges": df_temp["TP_edges"],
 			"FP_edges": df_temp["FP_edges"],
 			"FN_edges": df_temp["FN_edges"],
 			"Precision_edges": precision_edges,
-			"Recall_edges": recall_edges
+			"Recall_edges": recall_edges,
+			"F-score_edges": f_score_edges
 		}
 
 		# Create a DataFrame from the dictionary
@@ -503,10 +341,10 @@ class Evaluation():
 		## Reordering the columns
 		df_traits = df_traits[['trait'] + [col for col in df_traits.columns if col != 'trait']]
 
-		metric_file_node = self.save_folder / "metrics_node.csv"
-		metric_file_edge = self.save_folder / "metrics_edge.csv"
-		metrics_per_plant = self.save_folder / "metrics_per_plant.csv"
-		metric_file_traits = self.save_folder / "metrics_plant_traits.csv"
+		metric_file_node = self.save_folder / f"metrics_node{self.exp_name}.csv"
+		metric_file_edge = self.save_folder / f"metrics_edge{self.exp_name}.csv"
+		metrics_per_plant = self.save_folder / f"metrics_per_plant{self.exp_name}.csv"
+		metric_file_traits = self.save_folder / f"metrics_plant_traits{self.exp_name}.csv"
 
 		if not self.save_folder.exists():
 			self.save_folder.mkdir(parents=True)
@@ -525,9 +363,24 @@ class Evaluation():
 
 		return df_nodes, df_edges, df_metrics_per_plant
 
+	def determine_tp_fp_fn_edges(self, gt_nodes_matched, dt_nodes_matched, dt_edges, gt_query_edge):
+		if gt_query_edge[0] not in gt_nodes_matched or gt_query_edge[1] not in gt_nodes_matched:
+			return np.empty(0)
+
+		## get dt edge
+		matching_dt_edge = np.array(
+			[
+				dt_nodes_matched[gt_nodes_matched == gt_query_edge[0]][0],
+				dt_nodes_matched[gt_nodes_matched == gt_query_edge[1]][0],
+			]
+		)
+		# remember, undirected graph. if match exist in dt_edges it is a TP
+		if (dt_edges==matching_dt_edge).all(1).any() or (dt_edges==matching_dt_edge[..., ::-1]).all(1).any():
+			return matching_dt_edge
+		return np.empty(0)
 
 	def evaluate_single(self, 
-		gt_graph: Graph, dt_graph: Graph, vis=False
+		gt_graph, dt_graph, vis=False
 	):
 		"""Match xyz nodes based on euclidean distance."""
 		print(gt_graph.name)
@@ -537,7 +390,11 @@ class Evaluation():
 		gt_node_order = gt_graph.get_node_attribute("node_order")
 		dt_node_order= dt_graph.get_node_attribute("node_order")
 
-		dummy = skeleton_matching_bart(gt_graph, dt_graph, threshold=self.false_threshold, node_order=gt_graph.get_node_attribute("node_order"))
+		dummy = skeleton_matching(S_gt=gt_graph,
+							S_pred=dt_graph,
+							method="boogaard",
+							threshold=self.false_threshold,
+							node_order=gt_graph.get_node_attribute("node_order"))
 		dummy.match()
 
 		matched_indices = dummy.matched_indices
@@ -558,6 +415,7 @@ class Evaluation():
 			"FN": FN,
 			"Precision": precision,
 			"Recall": recall,
+			"F-score": 2*precision*recall / (precision+recall),
 			# "mean_match_distance": average_tp_error_meters,
 			# "CD": chamfer_distance,
 		}
@@ -584,47 +442,13 @@ class Evaluation():
 			node_metrics[f"FN_{x}"] = FN_x
 
 
-		## counts zero order
-		# bools =  gt_graph.get_node_attribute("node_order")==0
-		# matched_indices[:, 0]
-		
-
-		# df = pd.DataFrame(gt_nodes, columns=["x", "y", "z"])
-		# df["TP"] = 0
-		# df.loc[matched_indices[:, 0], "TP"] = 1
-		# # df["TP"].iloc[matched_indices[:, 0]] .sum()
-
-		# df["FP"] = 0
-		# df["FN"] = 0
-		# df.loc[df["TP"]==0, "FN"] = 1
-		# df["node_order"] = gt_graph.get_node_attribute("node_order")
-
+		################################### Chamfer Distance
 		chamfer_distance = 0
 		chamfer_distance = self.calculate_chamfer_distance(gt_nodes, dt_nodes)
 		node_metrics["CD"] = chamfer_distance
 
-		# node_metrics = {
-		# 	"TP": TP,
-		# 	"FP": FP,
-		# 	"FN": FN,
-		# 	"Precision": precision,
-		# 	"Recall": recall,
-		# 	# "mean_match_distance": average_tp_error_meters,
-		# 	"CD": chamfer_distance,
-		# }
-		# for x in self.node_order_eval_list:
-		# 	if x!=self.node_order_eval_list[-1]:
-		# 		bools = df["node_order"]==x
-		# 	else: # to include larger than
-		# 		bools = df["node_order"]>=x
-		# 	node_metrics["TP_"+str(x)] = int(df.loc[bools, "TP"].sum())
-		# 	node_metrics["FP_"+str(x)] = int(df.loc[bools, "FP"].sum())
-		# 	node_metrics["FN_"+str(x)] = int(df.loc[bools, "FN"].sum())
-
-			# df.loc[df["node_order"]==x, "FP"] = df.loc[df["node_order"]==x, "FP"].sum()
-			# df.loc[df["node_order"]==x, "FN"] = df.loc[df["node_order"]==x, "FN"].sum()
-
 		################################### edge & trait evaluation
+		gt_graph.get_angles()
 		gt_edges = gt_graph.get_edges()
 		dt_edges = dt_graph.get_edges()
 
@@ -643,51 +467,104 @@ class Evaluation():
 		dt_graph.get_internode_length()
 		dt_graph.get_angles()
 		trait_metrics = {x:{"gt":[], "dt":[], "counter":0, "counter_notmatched":0} for x in self.traits}
-		temp = gt_graph.get_gt_attributes()
-		temp_nodes = [x["node"] for x in temp]
+		gt_measurements: list[dict] = gt_graph.get_gt_attributes()
+		nodes_with_gt = [x["node"] for x in gt_measurements]
 
 		# for every node, if the node has a positive match calculate the error, else counter number of missed
-
 		for gt_edge in gt_edges:
 			if gt_edge[0] not in gt_nodes_matched or gt_edge[1] not in gt_nodes_matched:
-				if gt_edge[1] in temp_nodes:
-					indexi = temp_nodes.index(gt_edge[1])
-					trait = temp[indexi]
+				# check whether edge has gt measurement, if true update counter_notmatched
+				if gt_edge[1] in nodes_with_gt:
+					indexi = nodes_with_gt.index(gt_edge[1])
+					trait = gt_measurements[indexi]
 					for trait_name in self.traits:
 						if trait.get(trait_name) is None:
+							continue
+						if gt_graph.G.nodes[gt_edge[1]].get("leaf_angle_branch_id", None) is None:
+							## bug fix. The highest leaves do not have a new internode so therefore those should be skipped
 							continue
 						trait_metrics[trait_name]["counter_notmatched"] = trait_metrics[trait_name].get("counter_notmatched", 0) + 1
 				continue
 
+			## get dt edge
 			matching_dt_edge = np.array(
 				[
 					dt_nodes_matched[gt_nodes_matched == gt_edge[0]][0],
 					dt_nodes_matched[gt_nodes_matched == gt_edge[1]][0],
 				]
 			)
-			# remember, undirected graph
-			if matching_dt_edge in dt_edges or matching_dt_edge[..., ::-1] in dt_edges:
+			# remember, undirected graph. if match exist in dt_edges it is a TP
+			# if matching_dt_edge in dt_edges or matching_dt_edge[..., ::-1] in dt_edges:
+			if (dt_edges==matching_dt_edge).all(1).any() or (dt_edges==matching_dt_edge[..., ::-1]).all(1).any():
 				edge_tp += 1
 
-				if gt_edge[1] in temp_nodes:
-					indexi = temp_nodes.index(gt_edge[1])
-					trait = temp[indexi]
+				if gt_edge[1] in nodes_with_gt:
+					indexi = nodes_with_gt.index(gt_edge[1])
+					trait = gt_measurements[indexi]
+					prev_dt_node = matched_indices[matched_indices[:,0]==gt_edge[0], 1][0]
 					dt_node = matched_indices[matched_indices[:,0]==gt_edge[1], 1][0]
 					dt_traits = dt_graph.G.nodes[dt_node]
 					for trait_name in self.traits:
 						if trait.get(trait_name) is None:
 							continue
 						dt_value = dt_traits.get(trait_name.replace("gt_", "")) ## check because upper dt_trait will not have 
-						if dt_value is not None:
-							trait_metrics[trait_name]["dt"].append(dt_value)
-							trait_metrics[trait_name]["gt"].append(trait[trait_name])
-							trait_metrics[trait_name]["counter"] = trait_metrics[trait_name].get("counter", 0) + 1
+						## 
+						if trait_name=="gt_ph_angle":
+							edge_of_trait0= [int(gt_edge[0]), gt_graph.G.nodes[gt_edge[0]]["phyllotactic_angle_id"]]
+							temp_matched_edge0 = self.determine_tp_fp_fn_edges(gt_nodes_matched,
+								dt_nodes_matched, dt_edges, gt_query_edge=edge_of_trait0)
+
+							edge_of_trait1= [int(gt_edge[1]), gt_graph.G.nodes[gt_edge[1]]["phyllotactic_angle_id"]]
+							temp_matched_edge1 = self.determine_tp_fp_fn_edges(gt_nodes_matched,
+								dt_nodes_matched, dt_edges, gt_query_edge=edge_of_trait1)
+							
+							if temp_matched_edge0.size==0 or temp_matched_edge1.size==0 or dt_value is None:
+								trait_metrics[trait_name]["counter_notmatched"] = trait_metrics[trait_name].get("counter_notmatched", 0) + 1
+							elif temp_matched_edge0[1]==dt_graph.G.nodes[prev_dt_node].get("phyllotactic_angle_id", None) and temp_matched_edge1[1]==dt_graph.G.nodes[dt_node].get("phyllotactic_angle_id", None):
+								trait_metrics[trait_name]["dt"].append(dt_value)
+								trait_metrics[trait_name]["gt"].append(trait[trait_name])
+								trait_metrics[trait_name]["counter"] = trait_metrics[trait_name].get("counter", 0) + 1
+							else:
+								trait_metrics[trait_name]["counter_notmatched"] = trait_metrics[trait_name].get("counter_notmatched", 0) + 1
+						elif trait_name=="gt_lf_angle":
+							if gt_graph.G.nodes[gt_edge[1]].get("leaf_angle_branch_id", None) is None:
+								## bug fix. The highest leaves do not have a new internode so therefore those should be skipped
+								continue
+							# edge_of_trait0= [int(gt_edge[1]), gt_graph.G.nodes[gt_edge[1]]"leaf_angle_branch_id", np.inf)]
+							edge_of_trait0= [int(gt_edge[1]), gt_graph.G.nodes[gt_edge[1]]["leaf_angle_branch_id"]]
+
+							temp_matched_edge0 = self.determine_tp_fp_fn_edges(gt_nodes_matched,
+								dt_nodes_matched, dt_edges, gt_query_edge=edge_of_trait0)
+
+							edge_of_trait1= [int(gt_edge[1]), gt_graph.G.nodes[gt_edge[1]]["leaf_angle_nextnode_id"]]
+							temp_matched_edge1 = self.determine_tp_fp_fn_edges(gt_nodes_matched,
+								dt_nodes_matched, dt_edges, gt_query_edge=edge_of_trait1)
+							
+							if temp_matched_edge0.size==0 or temp_matched_edge1.size==0 or dt_value is None:
+								trait_metrics[trait_name]["counter_notmatched"] = trait_metrics[trait_name].get("counter_notmatched", 0) + 1
+							# elif temp_matched_edge0[1]==dt_graph.G.nodes[prev_dt_node].get("phyllotactic_angle_id", None) and temp_matched_edge1[1]==dt_graph.G.nodes[dt_node].get("phyllotactic_angle_id", None):
+							else:
+								trait_metrics[trait_name]["dt"].append(dt_value)
+								trait_metrics[trait_name]["gt"].append(trait[trait_name])
+								trait_metrics[trait_name]["counter"] = trait_metrics[trait_name].get("counter", 0) + 1
+							# else:
+							# 	trait_metrics[trait_name]["counter_notmatched"] = trait_metrics[trait_name].get("counter_notmatched", 0) + 1
+
+						elif trait_name=="gt_int_length":
+							if dt_value is not None:
+								trait_metrics[trait_name]["dt"].append(dt_value)
+								trait_metrics[trait_name]["gt"].append(trait[trait_name])
+								trait_metrics[trait_name]["counter"] = trait_metrics[trait_name].get("counter", 0) + 1
+							else:
+								## despite TP it might be possible that node order is incorrect so no match possible.
+								trait_metrics[trait_name]["counter_notmatched"] = trait_metrics[trait_name].get("counter_notmatched", 0) + 1
 						else:
-							trait_metrics[trait_name]["counter_notmatched"] = trait_metrics[trait_name].get("counter_notmatched", 0) + 1
+							NotImplementedError(f"Evaluation of trait name {trait_name} not yet implemented")
 			else:
-				if gt_edge[1] in temp_nodes:
-					indexi = temp_nodes.index(gt_edge[1])
-					trait = temp[indexi]
+				# check whether edge has gt measurement, if true update counter_notmatched
+				if gt_edge[1] in nodes_with_gt:
+					indexi = nodes_with_gt.index(gt_edge[1])
+					trait = gt_measurements[indexi]
 					for trait_name in self.traits:
 						if trait.get(trait_name) is None:
 							continue
@@ -707,59 +584,43 @@ class Evaluation():
 			"TP_edges": int(edge_tp),
 			"FP_edges": int(edge_fp),
 			"FN_edges": int(edge_fn),
-			"Precision_edges": int(edge_precision),
-			"Recall_edges": int(edge_recall),
+			"Precision_edges": float(edge_precision),
+			"Recall_edges": float(edge_recall),
+			"F-score_edges": float(2*edge_precision*edge_recall / (edge_precision + edge_recall)),
 		}
 
-		
-		# for trait in temp:
-		# 	node = trait["node"]
-		# 	if node in gt_nodes_matched:
-		# 		dt_node = matched_indices[matched_indices[:,0]==node, 1][0]
-		# 		dt_traits = dt_graph.G.nodes[dt_node]
-		# 		for trait_name in traits:
-		# 			if trait.get(trait_name) is None:
-		# 				continue
-		# 			dt_value = dt_traits.get(trait_name.replace("gt_", "")) ## check because upper dt_trait will not have 
-		# 			if dt_value is not None:
-		# 				trait_metrics[trait_name]["dt"].append(dt_value)
-		# 				trait_metrics[trait_name]["gt"].append(trait[trait_name])
-		# 				trait_metrics[trait_name]["counter"] = trait_metrics[trait_name].get("counter", 0) + 1
-		# 	else:
-		# 		for trait_name in traits:
-		# 			if trait.get(trait_name) is None:
-		# 				continue
-		# 			trait_metrics[trait_name]["counter_notmatched"] = trait_metrics[trait_name].get("counter_notmatched", 0) + 1
-
-		# for trait in traits:
-		# 	gt_trait = gt_graph.get_node_attribute(trait)
-		# 	dt_trait = dt_graph.get_node_attribute(trait.replace("gt_", ""))
-		# 	trait_error = np.abs(gt_trait - dt_trait).mean()
-		# 	trait_metrics[trait] = trait_error
-
 		if vis:
-			ve.vis_evaluation(gt_graph, dt_graph, matched_indices)
+			self.pred_name = Path(self.pred_name)
+			save_name = self.pred_name.parent / (self.pred_name.stem + f"{self.exp_name}.png")
+			ve.vis_evaluation(gt_graph, dt_graph, matched_indices, save_name=save_name)
 			
 		return node_metrics, edge_metrics, trait_metrics
 
 
-	def evaluate_pred(self, S_pred=None, pred_name=None, vis=False, evaluate_gt=False):
+	def evaluate_pred(self, pred_name=None, vis=False, evaluate_gt=False):
 		"""Find related ground truth and return accuracy"""
-		lists_gt_names = list(self.gt_path_dir.rglob("*.csv"))
-		lists_gt_name_stem = [x.stem for x in lists_gt_names]
-		indexi = lists_gt_name_stem.index(pred_name)
-		if indexi==[]:
-			print(f"No ground truth csv found for {pred_name}")
-			return
-		
+		self.load_all_gt_filenames()
+		gt_name, pc_name = None, None
+		for gt_name_1, pc_name_1, semantic_name_1 in self.load_all_gt_filenames():
+			if pc_name_1.stem!=pred_name.stem:
+				continue
+			gt_name = gt_name_1
+			pc_name = pc_name_1
+			semantic_name = semantic_name_1
+
+		if gt_name is None or pc_name is None:
+			raise FileNotFoundError("In evaluatin line 770 gt or pc name not found")
+
+		S_gt = self.load_gt_data(gt_name, pc_name, semantic_name)
+
 		print("Evaluating", pred_name)
 
-		S_gt = self.load_gt_data(lists_gt_names[indexi])
 		if evaluate_gt: ## evaluate the ground truth traits
 			S_pred = copy.deepcopy(S_gt)
-		elif S_pred is None:
-			S_pred = self.load_pred_data(lists_gt_names[indexi])
-
+			self.pred_name = Path(gt_name.name + ".csv") 
+		else:
+			S_pred = self.load_pred_data(pred_name.stem)
+			
 
 		node_metric, edge_metric, trait_metrics = self.evaluate_single(S_gt, S_pred, vis=vis)
 		self.print_metric(node_metric)
@@ -769,12 +630,13 @@ class Evaluation():
 
 	def load_all_gt_filenames(self):
 		file_names = load_json(self.gt_json)
-		return natsorted([self.gt_json.parent / f["skeleton_file_name"] for f in file_names])
+		return natsorted([(self.gt_json.parent / f["skeleton_file_name"], self.gt_json.parent / f["file_name"], self.gt_json.parent / f["sem_seg_file_name"]) for f in file_names])
 
 
-	def load_gt_data(self, gt_name):
+	def load_gt_data(self, gt_name, pc_name, semantic_name=None):
 		print("Loading", gt_name)
-		S_gt = create_skeleton_gt_data(gt_name)
+		S_gt = SkeletonGraph.from_skeleton_gt_data(gt_name, pc_name, pc_semantic_path=semantic_name)
+		# S_gt.df_pc = pd.read_csv(pc_name)
 		S_gt.get_node_order()
 		# S_gt.visualise_graph()
 		S_gt.filter(self.filter_node_order, self.parents_only)
@@ -788,12 +650,15 @@ class Evaluation():
 		S_pred = SkeletonGraph()
 		S_pred.load_csv(self.dt_path_dir / (plant_id + ".csv"))
 		S_pred.get_node_order()
-		# S_pred.filter(self.filter_node_order, self.parents_only)
+		S_pred.main_post_processing(self.cfg_post_processing)
+
+		S_pred.filter(self.filter_node_order, self.parents_only)
 		# S_pred.get_edge_type()
 		# S_pred.edge_from_filtered()
 		# S_pred.line_fitting_3d()
 		# S_pred.filter(self.filter_node_order, self.parents_only)
-		S_pred.main_post_processing(self.cfg)
+		self.pred_name = self.dt_path_dir / (plant_id + ".csv")
+
 
 		return S_pred
 	
@@ -819,15 +684,21 @@ class Evaluation():
 
 if __name__ == "__main__":
 	from scripts import config
-	cfg = config.Config("config.yaml")
-	dt_graph_dir = Path("Resources/output_skeleton") / config["skeleton_method"]
+	cfg = config.init_config(cfg_filename="config.yaml")
 
-	obj = Evaluation(cfg.pointcloud_dir, dt_graph_dir, cfg=config)
+	## original tomatowur
+	# cfg = config.Config("config.yaml")
+	# dt_graph_dir = Path("Resources/output_skeleton") / config["skeleton_method"]
+	# obj = Evaluation(cfg.pointcloud_dir, dt_graph_dir, cfg=config)
+	# obj.evaluate_pred(pred_name="Harvest_01_PotNr_95", vis=True, evaluate_gt=config["evaluation"]["evaluate_gt"])
+
+	obj = Evaluation(cfg.data.pointcloud_dir, cfg.save_folder, **cfg.evaluate)
+
 	# obj.filter_node_order = 0
 	# obj.parents_only = False
 	# obj.evaluate_pairs_per_nodeorder(vis=False)
 	# obj.evaluate_pairs(vis=False, evaluate_gt=config["evaluation"]["evaluate_gt"])
-	obj.evaluate_pred(pred_name="Harvest_01_PotNr_95", vis=True, evaluate_gt=config["evaluation"]["evaluate_gt"])
+	obj.evaluate_pred(pred_name=Path("Harvest_01_PotNr_95"), vis=True, evaluate_gt=True)
 	# obj.evaluate_pred(pred_name="Harvest_01_PotNr_95", vis=True, evaluate_gt=True)
 
 

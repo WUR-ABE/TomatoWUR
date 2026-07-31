@@ -58,7 +58,7 @@ def skeleton_from_distance_to_root_clusters(points, root, binsize, k, connect_al
     if verbose:
         print("Compute cluster according to distance to root.")
     group_components = quotient_points_from_adjacency_graph(binsize, points, remaniangraph, distances_to_root)
-    print("Nb of groups :", len(group_components))
+    print("Nb of groups :", len(group_components), "bin size", binsize, "avg points per bin", points.shape[0]/len(group_components))
     visualise = False
     if visualise:
         visualize_examples.vis_components(points, group_components)
@@ -81,7 +81,7 @@ def skeleton_from_distance_to_root_clusters(points, root, binsize, k, connect_al
         edges = np.zeros((group_centroid.shape[0], 2))
         edges[:,0] = np.arange(group_centroid.shape[0])
         edges[:,1] = group_parents
-        visualize_examples.vis(points, group_centroid, edges)
+        visualize_examples.vis(pc=points, nodes=group_centroid, edges=edges)
 
 
     return group_centroid, group_parents, group_components
@@ -96,9 +96,76 @@ def k_closest_points_from_ann(points, k, connect_all_points):
     
     # if symmetric: ##connect_all_points
     #     result = symmetrize_connections(result)
+
+
     return result
 
 
+# def connect_componenets(points, indices, k):
+#     ##TODO check connected components of openalea:
+# # https://github.com/fredboudon/plantscan3d/blob/master/src/openalea/plantscan3d/xumethod.py#L22
+
+#     from scipy.sparse import csr_matrix
+#     from scipy.sparse.csgraph import connected_components
+#     from scipy.spatial.distance import cdist
+
+#     # Build initial adjacency matrix
+#     n_points = points.shape[0]
+#     rows = np.repeat(np.arange(n_points), k)
+#     cols = np.array(indices).flatten()
+#     data = np.ones(len(rows))
+#     adjacency_matrix = csr_matrix((data, (rows, cols)), shape=(n_points, n_points))
+
+#     # Check connected components
+#     n_components, labels = connected_components(csgraph=adjacency_matrix, directed=False)
+#     print(f"Initial number of components: {n_components}")
+
+#     # If not connected, connect the components
+#     if n_components > 1:
+#         print("Connecting components...")
+#         components = [np.where(labels == i)[0] for i in range(n_components)]
+        
+#         while len(components) > 1:
+#             min_dist = np.inf
+#             best_pair = None
+            
+#             # Always connect the first component to the closest other component
+#             comp_a = components[0]
+            
+#             for j in range(1, len(components)):
+#                 comp_b = components[j]
+                
+#                 # Calculate distances between all pairs
+#                 dist = cdist(points[comp_a], points[comp_b])
+#                 idx = np.unravel_index(np.argmin(dist), dist.shape)
+                
+#                 if dist[idx] < min_dist:
+#                     min_dist = dist[idx]
+#                     best_pair = (comp_a[idx[0]], comp_b[idx[1]], j)
+            
+#             # Add an edge between the best_pair
+#             i, j, comp_b_index = best_pair
+#             adjacency_matrix[i, j] = 1
+#             adjacency_matrix[j, i] = 1  # undirected
+
+#             # Merge the two components
+#             components[0] = np.concatenate((components[0], components[comp_b_index]))
+#             del components[comp_b_index]
+
+#         # After fixing, re-check connectivity
+#         n_components, labels = connected_components(csgraph=adjacency_matrix, directed=False)
+#         print(f"Final number of components: {n_components}")
+#         # For each node, find its neighbors
+#         new_indices = []
+
+#         for i in range(n_points):
+#             neighbors = adjacency_matrix[i].nonzero()[1]  # get connected indices
+#             new_indices.append(neighbors.tolist())
+#         return new_indices
+
+#     else:
+#         print("Already connected!")
+    
 
 
 REAL_MAX = float('inf')

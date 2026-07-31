@@ -1,20 +1,117 @@
 
 import polyscope as ps
 import numpy as np
-
-pc_radius = 0.001
+from pathlib import Path
+import pandas as pd
+import json
+from PIL import Image
+import time
+## Default
+pc_radius = 0.00025
 node_radius = 0.006
 skeleton_radius = 0.001
 vector_length = 0.02
 vector_radius = 0.0005
 
+default_node_color = [227/255, 185/255, 28/255] # yellow colour
+default_edge_color = [227/255, 185/255, 28/255] # yellow colour
+
+show=True
+# show=False
+## PAPER section 2 flowchart figure. plant is Harvest_01_PotNr_55
 
 
+section2Matrial = True
+section2Matrial = False
+# if section2Matrial:
+# pc_radius = 0.00075 ## fig 2 section 2.1.1 - 2.1.4 Xu bin_ratio = 10, n_neighbours=20
+# pc_radius = 0.000 ## fig 2 section 2.1.5 post processing Xu bin_ratio = 40
+node_radius = 0.009
+skeleton_radius = 0.005
+ps.set_ground_plane_mode("none")
+print("PAPER M&M SETTINGS ACTIVE")
+##
 
+## PAPER Results experiment 1
+# pc_radius = 0.000
+# node_radius = 0.008
+# skeleton_radius = 0.002
+
+
+## graphical abstract
+# pc_radius = 0.0005*2
+
+
+ps.set_ground_plane_mode("none")
 
 ps.set_up_dir("z_up")
 ps.set_front_dir("neg_y_front")
 ps.set_navigation_style("turntable")
+
+
+
+semantic_id2rgb_colour = {
+    1: [255, 50, 50], # leaves
+    2: [255, 225, 50], # main stem
+    3: [109, 255, 50], # pole
+    4: [50, 167, 255], # side stem
+    5: [167, 50, 255], # pot / node
+    255: [0,0,0], # noise
+}
+# Find the maximum semantic ID to determine the size of the array
+max_id = max(semantic_id2rgb_colour.keys())
+# Create an array where index corresponds to the semantic ID
+rgb_array = np.zeros((max_id + 1, 3), dtype=np.uint8)
+# Populate the array with the RGB values
+for key, value in semantic_id2rgb_colour.items():
+    rgb_array[key] = value
+
+def rotate_arround(center, save_dir, save_name=""):
+    # Center of the plant (change if needed)
+    # center = np.array([0.0, 0.0, 0.0])
+
+    radius = 80     # distance from plant (adjust as needed)
+    height = 1      # vertical offset
+    axis= "z"
+
+    for i in range(100):
+        angle = (i / 100) * 2 * np.pi
+
+        if axis == "z":
+            # rotate in XY plane (most common top-down axis)
+            cam_pos = center + np.array([
+                radius * np.cos(angle),
+                radius * np.sin(angle),
+                height
+            ])
+
+        elif axis == "x":
+            # rotate in YZ plane
+            cam_pos = center + np.array([
+               height,
+                radius * np.cos(angle),
+                radius * np.sin(angle)
+            ])
+
+        elif axis == "y":
+            # rotate in XZ plane
+            cam_pos = center + np.array([
+                radius * np.cos(angle),
+                height,
+                radius * np.sin(angle)
+            ])
+
+        else:
+            raise ValueError("axis must be 'x', 'y', or 'z'")
+
+        # Look at plant center
+        ps.look_at(cam_pos, center)
+
+        time.sleep(0.05)
+
+        screenshot_path = save_dir / f"{Path(save_name).stem}_rotation_{i:03d}.png"
+        ps.screenshot(filename=str(screenshot_path))
+        # crop_image(screenshot_path)
 
 def pred2colors(pred):
     color_mapping = { 
@@ -60,7 +157,19 @@ def pred2colors(pred):
 
 def add_node_order(ps_cloud, node_order):
     if node_order is not None:
-        ps_cloud.add_scalar_quantity("node_order", node_order, enabled=True)
+        # Define colors for node orders: 0=purple, 1=cyan, 2=yellow
+        order_colors = np.zeros((node_order.shape[0], 3))
+        order_colors[node_order == 0] = [68/255, 1/255, 84/255]   # purple
+        order_colors[node_order == 1] = [33/255, 145/255, 141/255]               # cyan
+        order_colors[node_order == 2] = [253/255, 231/255, 37/255]               # yellow
+        order_colors[node_order > 2] = [255/255, 98/255, 0/225]                # orange
+        ps_cloud.add_color_quantity("node_order_color", order_colors, enabled=True)
+        # ps_cloud.add_scalar_quantity("node_order", node_order, enabled=True)
+        # Add Viridis color palette for node_order with n=3
+        # import matplotlib.pyplot as plt
+        # viridis_colors = plt.cm.viridis(np.linspace(0, 1, 3))[:, :3]  # shape (3, 3), RGB
+        # order_colors_viridis = viridis_colors[node_order % 3]
+        # ps_cloud.add_color_quantity("node_order_viridis", order_colors_viridis, enabled=True)
 
 def add_attributes(ps_cloud, attributes):
     if attributes is not None:
@@ -69,58 +178,117 @@ def add_attributes(ps_cloud, attributes):
                 continue
                 # ps_cloud3.add_categorical_quantity(key, values, enabled=False)
             else:
+                # Filter out NaN and infinite values
+                values = np.array(values, dtype=float)
+                if np.any(np.isnan(values)) or np.any(np.isinf(values)):
+                    # print(f"Warning: '{key}' contains NaN or inf values. These will be replaced with zero.")
+                    values = np.nan_to_num(values, nan=-1, posinf=-1, neginf=-1)
                 ps_cloud.add_scalar_quantity(key, values, enabled=False)
 
 def add_nodes(name="nodes", nodes=[], root_idx=None, parents=None):
     if nodes is not None:
         ps_cloud3 = ps.register_point_cloud(name, np.asarray(nodes), radius=node_radius) # (N, 3)
         node_colors = np.zeros(nodes.shape)
-        node_colors[:, :] = [0.5, 0.5, 0.5] 
+        node_colors[:, :] = default_node_color
         if root_idx is not None:
             node_colors[root_idx, :] = [1, 0, 0]
         if parents is not None:
             node_colors[parents, :] = [0, 1, 0]
-        ps_cloud3.add_color_quantity(name, node_colors, enabled=True)
+        ps_cloud3.add_color_quantity(name, node_colors, enabled=False)
         return ps_cloud3
     else:
         return None
 
-def add_edges(name="Skeleton", nodes=None, edges=None, edges_type=None):
+def add_edges(name="Skeleton", nodes=None, edges=None, edges_type=None, attributes=None, enabled=True):
     if edges is not None:
-        ps_cloud4 = ps.register_curve_network(name, nodes, edges, radius=skeleton_radius)
+        ps_cloud4 = ps.register_curve_network(name, nodes, edges, radius=skeleton_radius, enabled=enabled)
+        edge_colors = np.zeros((edges.shape[0], 3))
         if edges_type is not None:
-            colors = np.zeros((edges.shape[0], 3))
-            colors[edges_type=="+", :] = np.array([1, 0, 0])
-            ps_cloud4.add_color_quantity(name, colors, defined_on='edges', enabled=True)
+            edge_colors[edges_type == "+", :] = np.array([1, 0, 0])
+        else:
+            edge_colors[:, :] = default_edge_color
+        ps_cloud4.add_color_quantity(name, edge_colors, defined_on='edges', enabled=True)
+        if attributes is not None:
+            for key, values in attributes.items():
+                if isinstance(values[0], str):
+                    continue
+                else:
+                    ps_cloud4.add_scalar_quantity(key, values, defined_on='edges', enabled=False)
 
-def add_pc(name="point cloud", pc=None, colors=None, distances=None, normals=None):
+def add_pc(name="point cloud", pc=None, colors=None, distances=None, normals=None, scalars=None, enabled=True):
+
+
     if pc is not None:
-        ps_cloud = ps.register_point_cloud(name,np.asarray(pc), radius=pc_radius) # (N, 3)
+        ps_cloud = ps.register_point_cloud(name,np.asarray(pc), radius=pc_radius, enabled=enabled) # (N, 3)
         if colors is not None:
-            ps_cloud.add_color_quantity("rand colors", np.asarray(colors)/255, enabled=True)
+            ## add raw point cloud
+            if isinstance(colors, np.ndarray):
+                if colors.ndim==1: ## means it are labels -> convert those to colours:
+                    colors=rgb_array[colors.astype(int)]
+        else:  
+            colors = np.zeros(pc.shape)
+            colors[:, :] = [28,99,227] # blue colour
+        ps_cloud.add_color_quantity("colors", np.asarray(colors)/255, enabled=True)
         if distances is not None:
-            ps_cloud.add_scalar_quantity("distances", np.asarray(distances), cmap="jet", enabled=True)
+            ps_cloud.add_scalar_quantity("distances", np.asarray(distances), cmap="viridis", enabled=True)
+        if scalars is not None:
+            ps_cloud.add_scalar_quantity("scalars", np.asarray(scalars), enabled=True)
         if normals is not None:
             ps_cloud.add_vector_quantity("normal", np.asarray(normals), enabled=True, length=vector_length, radius=vector_radius)
         return ps_cloud
     else:
         return None
 
-def vis(pc=None, colors=None, nodes=None, node_order=None, edges=None, edges_type=None, root_idx=None, parents=None, distances=None, normals=None, attributes=None):
-
+def vis(pc=None, colors=None, nodes=None, node_order=None, edges=None, edges_type=None, root_idx=None, parents=None, distances=None, normals=None, attributes=None,
+        edge_attributes={}, scalars=None, save_name=None):
+    ps.set_up_dir("z_up")
+    ps.remove_all_structures()
     ps.init()
-    ## add raw point cloud
-    add_pc("point cloud", pc, colors, distances, normals)
+
+    ## for figures graphical abstract
+    # node_order = None
+    # edges_type, edge_attributes = None, None
+    # parents = None
+    # edges = None
+    # edges_type = None
+
+    add_pc("point cloud", pc=pc, colors=colors, distances=distances, normals=normals, scalars=scalars)
 
     # add nodes
     ps_cloud_nodes = add_nodes("nodes", nodes, root_idx, parents)
-    add_node_order(ps_cloud_nodes, node_order)
-    add_attributes(ps_cloud_nodes, attributes)
+
+    if not section2Matrial:
+        add_attributes(ps_cloud_nodes, attributes)
+        add_node_order(ps_cloud_nodes, node_order)
+
+
+        # if ps_cloud_nodes is not None:
+        #     # Example: enable the "node_order" scalar quantity if it exists
+        #     if "node_order" in ps_cloud_nodes.scalar_quantities:
+        #         ps_cloud_nodes.scalar_quantities["node_order"].set_enabled(True)
 
     # add edges
-    add_edges("Skeleton", nodes, edges, edges_type)
+        add_edges("Skeleton", nodes, edges, edges_type, edge_attributes)
 
-    ps.show()
+    if save_name is not None:
+        ps.reset_camera_to_home_view()
+        time.sleep(0.1)
+        ps.screenshot(filename=str(save_name))
+        crop_image(save_name)
+        # rotate_arround(center = pc.mean(0), save_dir=save_dir)
+
+
+    if show:
+        print("Press q to quit...")
+        # Register callback to quit on 'q' key
+        def callback():
+            import polyscope.imgui as psim
+            if psim.IsKeyPressed(psim.ImGuiKey_Q):
+                ps.unshow()
+        ps.set_user_callback(callback)
+        ps.show()
+
+
     # ps.screenshot("frame_filename.png")
 
 
@@ -190,22 +358,34 @@ def vis_mtg(mtg):
     ps.register_curve_network("Skeleton", np.asarray(nodes), parents, radius=skeleton_radius)
     ps.show()
 
-def vis_evaluation(S_gt, S_pred, matching_edges):
-    ps.init()
+def vis_evaluation(S_gt, S_pred, matching_edges, save_name=None):
     ps.set_up_dir("z_up")
     ps.remove_all_structures()
+    
+
+    ps.init()
 
     # Set the colors for each point cloud
-    gt_tp_color = [0, 1, 0]  # Green
-    pred_tp_color = [0, 0.5, 0]
-    fp_color = [1, 0, 0]  # Red
-    fn_color = [220/255, 45/255, 0]  # orange
+    gt_tp_color = [0, 0, 0]  # Black
+    pred_tp_color = [0, 0.5, 0] # green 
+    fn_color = [0, 0, 1]  # blue
+    fp_color = default_node_color #[1, 1, 0]  # yellow fn_color = [1, 0.08, 0.58]  # pink
+    # fn_color = [1, 0.08, 0.58] # pink
 
     S_gt_nodes = S_gt.get_node_attribute()
     S_pred_nodes = S_pred.get_node_attribute()
 
     ############ add GT
-    ps.register_point_cloud("point_cloud", S_gt.get_xyz_pointcloud(), radius=pc_radius)
+    pcd = S_gt.get_xyz_pointcloud()
+    semantic = S_gt.get_semantic_pointcloud()
+    bool_array = np.bitwise_or(semantic==1 ,semantic==3) # 1=leaves, 2=main stem, 3=pole, 4=side stem
+
+    if semantic.ndim>=2:
+        colors = semantic[~bool_array,:]
+    else:
+        colors = semantic[~bool_array]
+
+    add_pc("point_cloud", pc=pcd[~bool_array, :], colors=colors)
 
     # ps_gt = ps.register_point_cloud("GT", S_gt_nodes, radius=node_radius)
     ps_gt = add_nodes("nodes_gt", S_gt_nodes)
@@ -215,7 +395,7 @@ def vis_evaluation(S_gt, S_pred, matching_edges):
         color_gt[matching_edges[:, 0], :] = gt_tp_color
     ps_gt.add_color_quantity("colors", color_gt, enabled=True)
 
-    add_edges("Skeleton", S_gt_nodes, S_gt.get_edges(), S_gt.get_edge_attribute("edge_type"))
+    add_edges("Skeleton", S_gt_nodes, S_gt.get_edges(), S_gt.get_edge_attribute("edge_type"), enabled=False)
     add_attributes(ps_gt, S_gt.get_attributes())
 
     ############ add PRED
@@ -246,13 +426,38 @@ def vis_evaluation(S_gt, S_pred, matching_edges):
                 radius=0.005,
                 color=pred_tp_color,
             )
-    ps.show()
 
+    if save_name is not None:
+        ps.reset_camera_to_home_view()
+        time.sleep(0.1)
+        ps.screenshot(filename=str(save_name))
+        crop_image(save_name)
+
+    if show:
+        ps.show()
+
+
+def crop_image(load_name):
+    img = Image.open(load_name).convert("RGBA")
+    arr = np.array(img)
+
+    # Find non-transparent pixels
+    alpha = arr[:, :, 3]
+    nonzero = np.argwhere(alpha > 0)
+
+    if nonzero.size == 0:
+        print("No non-transparent pixels found.")
+        return
+
+    ymin, xmin = nonzero.min(axis=0)[:2]
+    ymax, xmax = nonzero.max(axis=0)[:2]
+
+    # Crop the image
+    cropped = img.crop((xmin, ymin, xmax + 1, ymax + 1))
+    cropped.save(load_name)
 
 def vis_correspondence():
-    from pathlib import Path
-    import pandas as pd
-    import json
+
 
     folder = Path(r"W:\PROJECTS\VisionRoboticsData\ExxactRobotics\tomato_plant_johan_series8\Reconstruction_aligned_pc") 
     points_list = []
@@ -383,6 +588,33 @@ def vis_correspondence():
         ps.remove_all_structures()
         print(ii)
 
-
 if __name__=="__main__":
-    vis_correspondence()
+    # Create some dummy data for debugging vis()
+    np.random.seed(42)
+    pc = np.random.rand(100, 3)
+    colors = np.random.randint(0, 6, size=100)
+    nodes = np.random.rand(10, 3)
+    node_order = np.arange(10)
+    edges = np.array([[i, i+1] for i in range(9)])
+    edges_type = np.array(["+"] * 9)
+    root_idx = 0
+    parents = np.arange(1, 10)
+    distances = np.random.rand(100)
+    normals = np.random.randn(100, 3)
+    attributes = {"attr1": np.random.rand(10)}
+    edge_attributes = {"edge_attr1": np.random.rand(9)}
+
+    vis(
+        pc=pc,
+        colors=colors,
+        nodes=nodes,
+        node_order=node_order,
+        edges=edges,
+        edges_type=edges_type,
+        root_idx=root_idx,
+        parents=parents,
+        distances=distances,
+        normals=normals,
+        attributes=attributes,
+        edge_attributes=edge_attributes
+    )
