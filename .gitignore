@@ -1,4 +1,5 @@
 *.pyc
+.vscode*
 .polyscope.ini
 imgui.ini
 
@@ -11,3 +12,5 @@ nerf*
 
 frames*
 debug/*
+
+*.egg-info
