@@ -1,0 +1,64 @@
+name: Python package
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - '*'  # Activate on all branches
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install .
+    #  code style, formatting issues, unused imports, complexity
+    # - name: Lint with Ruff
+    #   run: |
+    #     ruff check src/
+    # code errors, style violations (PEP8), code smells, and enforces coding standards.
+    # - name: Lint with PyLint
+    #   run: |
+    #     pylint agri_image_meta
+    # static type checker
+    # - name: Check types with MyPy
+    #   run: |
+    #       mypy src/
+    # unit and integration tests
+    # - name: Test with pytest
+    #   run: |
+    #     pytest tests
+
+  # Check for security-issues
+  trivy-scan:
+    name: Run Trivy Scan
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Trivy
+      run: |
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+    - name: Run Trivy on the repository
+      run: |
+        docker run --rm -v $(pwd):/project aquasec/trivy:0.69.3 fs --exit-code 1 --severity HIGH,CRITICAL /project
