@@ -2,7 +2,7 @@
 import numpy as np
 from collections import defaultdict
 # from mtg import MTG
-from skeletonisation_methods.plantscan3d.mtg import MTG
+from tomatowur.skeletonisation_methods.plantscan3d.mtg import MTG
 
 
 

@@ -68,7 +68,7 @@ def custom_voxel_carving(obj, img_folder_or_list, cubic_size = [400, 400, 800], 
     #     df["x" + cam_num] = points[:, 0]
     #     df["y" + cam_num] = points[:, 1]
     # pointcloud_utils.save_df_pointcloud("keep_voxels_outside_image.ply", df)
-    from scripts import visualize_examples as ve
+    from tomatowur.scripts import visualize_examples as ve
     ve.vis(pc=xyz_array)
 
     if save_name is not None:
@@ -77,6 +77,6 @@ def custom_voxel_carving(obj, img_folder_or_list, cubic_size = [400, 400, 800], 
         print("saved point cloud as", save_name)
 
 if __name__=="__main__":
-    from scripts import camera_calib
+    from tomatowur.scripts import camera_calib
 
     obj = camera_calib.CameraClass("config.yaml")

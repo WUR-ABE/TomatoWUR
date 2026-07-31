@@ -4,10 +4,12 @@ import numpy as np
 # import open3d as o3d
 # import matplotlib.pyplot as plt
 
-from scipy.spatial import distance_matrix
-from scipy.optimize import linear_sum_assignment
-from scipy.spatial.distance import pdist, squareform
-from scipy.sparse.csgraph import minimum_spanning_tree
+# from scipy.spatial import distance_matrix
+# from scipy.optimize import linear_sum_assignment
+# from scipy.spatial.distance import pdist, squareform
+# from scipy.sparse.csgraph import minimum_spanning_tree
+# from tomatowur.scripts.skeleton_graph import SkeletonGraph
+import json
 
 # from plant_registration_4d import skeleton
 # from plant_registration_4d import visualize as vis
@@ -258,8 +260,6 @@ from scipy.sparse.csgraph import minimum_spanning_tree
 # 	plt.show()
 # 	return S
 
-from scripts.skeleton_graph import SkeletonGraph
-import json
 
 def load_json(file_name):
 	with open(file_name, "r") as f:

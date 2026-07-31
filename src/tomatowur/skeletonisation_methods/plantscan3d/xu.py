@@ -5,9 +5,9 @@ import sys
 from sklearn.neighbors import NearestNeighbors
 from scipy.spatial import Delaunay
 
-from scripts import visualize_examples
-from skeletonisation_methods.plantscan3d.mtgmanip import initialize_mtg, pgltree2mtg, mtg2_nodes_edges_edge_types, saveNodeList, gaussian_filter, mtg2pgltree
-from skeletonisation_methods.plantscan3d.io import write_mtg, read_mtg_file
+from tomatowur.scripts import visualize_examples
+from tomatowur.skeletonisation_methods.plantscan3d.mtgmanip import initialize_mtg, pgltree2mtg, mtg2_nodes_edges_edge_types, saveNodeList, gaussian_filter, mtg2pgltree
+from tomatowur.skeletonisation_methods.plantscan3d.io import write_mtg, read_mtg_file
 
 
 

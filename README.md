@@ -23,19 +23,26 @@ The dataset is related to the paper:
     - deprecated CLI interface -> only config files instead. 
     ```python3 wurTomato.py --config config.yaml```
     For reproduceability of Point clouds to plait traits paper we recommend [git](https://github.com/WUR-ABE/point_cloud_to_plant_traits) related to that publication. 
+- 2026-07-31: created pyproject. TODO check pc_skeletor dependency
 
 ## Installation
 This software is tested on Python 3.11. To install the dependencies, run:
 ```bash
-pip install -r requirements.txt
+conda create --name tomatowur python=3.11
+conda activate tomatowur
+pip install -e .
 ## for laplacian skeletonisation also install pc_skeletor
-# pip install -e skeletonisation_methods/pc_skeletor/.
+# pip install -e src/tomatowur/skeletonisation_methods/pc_skeletor/.
+## verify installation with
+python3 -c "import tomatowur"
 ```
+
+
 
 ## Usage
 Make sure to extract and download the dataset, this will be done automatically if path can not be found:
 ```
-python3 wurTomato.py --config config.yaml
+wurtomato --config config.yaml run_mode=["visualise"]
 ```
 For more examples have a look at the example_notebook.ipynb
 

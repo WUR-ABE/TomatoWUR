@@ -7,12 +7,13 @@ import sys
 from copy import deepcopy
 
 from dataclasses import dataclass
-sys.path.append("")
-from scripts import visualize_examples as ve
-from scripts.postprocessing_methods import gaussian_weight, find_closest_points, create_new_points
-from scripts.calculate_angles import openalea_method, xy_plane_method
-from scripts.graph_to_tree import graph_edges_to_tree, get_single_edge_type, direction
-from scripts.utils_data import get_rotation_matrix
+from tomatowur.scripts import visualize_examples as ve
+from tomatowur.scripts.postprocessing_methods import gaussian_weight, find_closest_points, create_new_points
+from tomatowur.scripts.calculate_angles import openalea_method, xy_plane_method
+from tomatowur.scripts.graph_to_tree import graph_edges_to_tree, get_single_edge_type, direction
+from tomatowur.scripts.utils_data import get_rotation_matrix
+from tomatowur.scripts import nodes_to_graph
+from tomatowur.scripts.postprocessing_methods import gaussian_smoothing
 
 class SkeletonGraph():
 	'''
@@ -681,8 +682,8 @@ class SkeletonGraph():
 
 	@classmethod
 	def from_mtg(cls, mtg_name):
-		from skeletonisation_methods.plantscan3d import mtgmanip
-		from skeletonisation_methods.plantscan3d import io
+		from tomatowur.skeletonisation_methods.plantscan3d import mtgmanip
+		from tomatowur.skeletonisation_methods.plantscan3d import io
 
 		mtg = io.read_mtg_file(mtg_name)
 		nodes, edges, edge_type = mtgmanip.mtg2_nodes_edges_edge_types(mtg)
@@ -703,8 +704,8 @@ class SkeletonGraph():
 	
 
 	def export_as_mtg(self, save_name="example.mtg"):
-		from skeletonisation_methods.plantscan3d import mtgmanip
-		from skeletonisation_methods.plantscan3d import io
+		from tomatowur.skeletonisation_methods.plantscan3d import mtgmanip
+		from tomatowur.skeletonisation_methods.plantscan3d import io
 		mtg = mtgmanip.nodelist2mtg(nodes=self.get_node_attribute("pos"), edges=self.get_edges(), edge_types=self.get_edge_attribute("edge_type"), radius=None)
 		
 		# properties = [(p, 'REAL') for p in mtg.property_names() if p not in ['edge_type', 'index', 'label']]
@@ -774,7 +775,6 @@ class SkeletonGraph():
 
 
 	def reconnect_nodes(self, method="mst"):
-		from scripts import nodes_to_graph
 		points = self.get_xyz_pointcloud()
 		nodes, edges, edge_type = nodes_to_graph.nodes_to_graph(points=points,
 												  nodes=self.get_node_attribute(attribute="pos"),
@@ -875,7 +875,6 @@ class SkeletonGraph():
 		returns:
 			None
 		"""
-		from scripts.postprocessing_methods import gaussian_smoothing
 		self.G = gaussian_smoothing(self.G, **kwargs)
 
 		# It is possible that by apply smoothing non unique nodes are generated. 
@@ -1252,8 +1251,7 @@ def relabel(graph):
 
 
 if __name__=="__main__":
-	
-	from scripts import config
+	from tomatowur.scripts import config
 	cfg = config.init_config("PAPER/config.yaml")
 	
 	node_list_name = "Resources/output_skeleton_paper3/0-paper-2Dto3D/voxel/Harvest_01_PotNr_80.csv"

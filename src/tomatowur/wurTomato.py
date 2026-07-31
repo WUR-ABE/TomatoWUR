@@ -31,15 +31,16 @@ import polyscope as ps
 # from omegaconf import dictconfig
 # import yaml
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from scripts.utils_skeletonisation import findBottomCenterRoot, undirected2directed#convert_segmentation2skeleton, evaluate_skeleton
-from scripts import skeleton_graph
-from scripts import visualize_examples as ve
-from scripts import evaluate_semantic_segmentation
-from scripts.evaluate_skeletons import Evaluation
-from scripts import config
-from scripts.nodes_to_graph import nodes_to_graph
-
-from skeletonisation_methods.plantscan3d import xu
+from tomatowur.scripts.utils_skeletonisation import findBottomCenterRoot, undirected2directed#convert_segmentation2skeleton, evaluate_skeleton
+from tomatowur.scripts import skeleton_graph
+from tomatowur.scripts import visualize_examples as ve
+from tomatowur.scripts import evaluate_semantic_segmentation
+from tomatowur.scripts.evaluate_skeletons import Evaluation
+from tomatowur.scripts import config
+from tomatowur.scripts.nodes_to_graph import nodes_to_graph
+from tomatowur.scripts import camera_calib
+from tomatowur.scripts import voxel_carving
+from tomatowur.skeletonisation_methods.plantscan3d import xu
 import time
 
 
@@ -380,7 +381,7 @@ class WurTomatoData(Dataset):
                 save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
 
             elif self.cfg["skeleton_method"]=="som":
-                from skeletonisation_methods.som import som
+                from tomatowur.skeletonisation_methods.som import som
                 self.cfg["som"]["init"]["x"] = round(len(pcd_filtered)/self.cfg["som"]["points_per_node"]) ## empirecally
                 self.cfg["som"]["init"]["y"] = 1
 
@@ -418,7 +419,7 @@ class WurTomatoData(Dataset):
                 save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
 
             elif self.cfg["skeleton_method"]=="laplacian":
-                from skeletonisation_methods.pc_skeletor.pc_skeletor import LBC
+                from tomatowur.skeletonisation_methods.pc_skeletor.pc_skeletor import LBC
                 lbc = LBC(pcd_filtered, **self.cfg["laplacian"]["settings_lbc"])
                 lbc.extract_skeleton()
                 lbc.extract_topology()
@@ -453,7 +454,7 @@ class WurTomatoData(Dataset):
                 save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
 
             elif self.cfg["skeleton_method"]=="laplacian_semantic":
-                from skeletonisation_methods.pc_skeletor.pc_skeletor import SLBC
+                from tomatowur.skeletonisation_methods.pc_skeletor.pc_skeletor import SLBC
                 temp_dict = {'trunk': pcd_filtered[semantic_filtered==2,:], 'branches': pcd_filtered[semantic_filtered==4,:]}
                 lbc = SLBC(temp_dict, **self.cfg["laplacian_semantic"]["settings_lbc"])
                 lbc.extract_skeleton()
@@ -471,7 +472,7 @@ class WurTomatoData(Dataset):
                 save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
 
             elif self.cfg["skeleton_method"]=="adtree":
-                from skeletonisation_methods.adtree import Adtree_debugging
+                from tomatowur.skeletonisation_methods.adtree import Adtree_debugging
                 save_name = self.cfg.save_folder / (self.dataset[i]["file_name"].stem+".csv")
                 Adtree_debugging.run_adtree(adtree_path=self.cfg.adtree.adtree_path, xyz_array=pcd_filtered,
                                             output_name=save_name)
@@ -508,7 +509,6 @@ class WurTomatoData(Dataset):
         Attributes:
             camera_specs (CameraClass): An instance of CameraClass containing the camera specifications.
         """
-        from scripts import camera_calib
         if self.camera_specs is None:
             self.camera_specs = camera_calib.CameraClass(calib_folder=self.data.camera_poses_dir) 
 
@@ -519,14 +519,14 @@ class WurTomatoData(Dataset):
         if self.camera_specs is None:
             self.load_camera_specs()
         print("Staring voxel carving methodology")
-        from scripts import voxel_carving
         _, img_seg_list = self.get_2d_images(index)
         voxel_carving.custom_voxel_carving(self.camera_specs, img_folder_or_list=img_seg_list)
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for the TomatoWUR dataset processor."""
     parser = argparse.ArgumentParser(description="Loading wurTomato dataset")
-    parser.add_argument("--config", type=str, default= "config.yaml", help="debugging")
+    parser.add_argument("--config", type=str, default="config.yaml", help="debugging")
 
     # Parse the arguments
     args, unknown = parser.parse_known_args()
@@ -536,27 +536,31 @@ if __name__ == "__main__":
     print(obj.cfg.run_mode)
 
     for run_mode in obj.cfg.run_mode:
-        if run_mode=="voxel_carving":
+        if run_mode == "voxel_carving":
             obj.voxel_carving()
-        elif run_mode=="skeletonisation":
+        elif run_mode == "skeletonisation":
             obj.run_skeletonisation(visualise=obj.vis_skeleton)
-        elif run_mode=="evaluate":
+        elif run_mode == "evaluate":
             obj.run_skeleton_evaluation()
-        elif run_mode=="evaluate_semantic":
+        elif run_mode == "evaluate_semantic":
             obj.run_semantic_evaluation()
-        elif run_mode=="optimisation":
+        elif run_mode == "optimisation":
             obj.run_skeletonisation_optimisation()
-        elif run_mode=="visualise":
+        elif run_mode == "visualise":
             for i, obj_i in enumerate(obj):
                 print(i, obj_i.name)
                 obj_i.visualise_graph()
-        elif run_mode=="visualise_semantic":
+        elif run_mode == "visualise_semantic":
             obj.visualise_semantic()
-        elif run_mode=="visualise_skeleton":
+        elif run_mode == "visualise_skeleton":
             obj.visualise_skeleton()
-        elif run_mode=="evaluate_single":
+        elif run_mode == "evaluate_single":
             obj.run_single_skeleton_evaluation(obj.cfg.debug_plant)
             print(f"WARNING Please check run_mode: {run_mode}")
         else:
             print("runmodes is not valid, please check")
+
+
+if __name__ == "__main__":
+    main()
     
