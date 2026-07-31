@@ -31,7 +31,6 @@ import polyscope as ps
 # from omegaconf import dictconfig
 # import yaml
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from scripts.utils_data import create_skeleton_gt_data
 from scripts.utils_skeletonisation import findBottomCenterRoot, undirected2directed#convert_segmentation2skeleton, evaluate_skeleton
 from scripts import skeleton_graph
 from scripts import visualize_examples as ve
@@ -186,7 +185,7 @@ class WurTomatoData(Dataset):
 
     def load_graph(self, index):
         if self.S_gt is None or self.S_gt.name != self.dataset[index]["file_name"].stem:
-            self.S_gt = create_skeleton_gt_data(self.dataset[index]["skeleton_file_name"], pc_path=self.dataset[index]["file_name"], pc_semantic_path=self.dataset[index]["sem_seg_file_name"])
+            self.S_gt = skeleton_graph.SkeletonGraph.from_skeleton_gt_data(self.dataset[index]["skeleton_file_name"], pc_path=self.dataset[index]["file_name"], pc_semantic_path=self.dataset[index]["sem_seg_file_name"])
         return self.S_gt
     
     def get_index_by_name(self, name="Harvest_02_PlantNr_27"):
