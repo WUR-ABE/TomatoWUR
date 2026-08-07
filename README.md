@@ -28,6 +28,12 @@ The dataset is related to the paper:
 ## Installation
 This software is tested on Python 3.11. To install the dependencies, run:
 ```bash
+pip install tomatowur
+```
+OR to work locally and use pc_skeletor as well:
+```bash
+git clone https://github.com/WUR-ABE/TomatoWUR.git
+cd tomatowur
 conda create --name tomatowur python=3.11
 conda activate tomatowur
 pip install -e .
